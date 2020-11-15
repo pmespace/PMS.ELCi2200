@@ -1,0 +1,11 @@
+{
+  "Text": "",
+  "MerchantName": "",
+  "MerchantAddress": "",
+  "Type": 1,
+  "Seal": "",
+  "ResponseCode": "",
+  "TimerRead": 5,
+  "TimerWrite": 5,
+  "TimerWriteEx": 5
+}

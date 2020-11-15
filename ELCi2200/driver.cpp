@@ -12,15 +12,6 @@
 
 #pragma region compilation options
 
-//**********
-// Compilation options
-// sets using read & write by blocks
-//#define SENDORDEREX
-//#define GETORDEREX
-// sets/cancels asynchronous file operations
-#define DOOVERLAPPING
-//**********
-
 #pragma endregion
 
 #pragma region declarations
@@ -49,7 +40,7 @@ enum class Action
 #define ONESECONDIN100NANO			-10000000LL
 #define START_TRANSACTION_TIMER	2*ONESECOND
 #define NO_FILE						INVALID_HANDLE_VALUE
-#define NO_DRIVER						-1
+#define NB_ATTEMPTS					3
 
 // timers to adjust
 #define SECONDS_TO_WAIT_A_COMMAND	5
@@ -117,19 +108,19 @@ typedef struct
 
 typedef struct
 {
-	char * pFnc;
-	char * pRequest;				// type of order to the ELC (state, read, write)
-	char * pRequestEx;			// additional order details to the ELC (write only)
-	char * pRequestData;			// data transmitted for processing to the ELC (write only)
-	char * pReply;					// reply from the ELC (state, read, write)
-	char * pReplyEx;				// additional order details from the ELC (read only)
-	char * pReplyData;			// data received from the ELC (read only)
-	char * pReplyCR;				// indicates which CR is meaningfull on return
+	const char* pFnc;
+	char* pRequest;				// type of order to the ELC (state, read, write)
+	char* pRequestEx;			// additional order details to the ELC (write only)
+	char* pRequestData;			// data transmitted for processing to the ELC (write only)
+	char* pReply;					// reply from the ELC (state, read, write)
+	char* pReplyEx;				// additional order details from the ELC (read only)
+	char* pReplyData;			// data received from the ELC (read only)
+	char* pReplyCR;				// indicates which CR is meaningfull on return
 	DWORD dwReplyDataSize;		// size of data received from the ELC (read only)
 	DWORD nbSession;				// current number of session initiation attempts
 	DWORD nbData;					// current number of data reception attempts
 	REPLYCR CR;						// the CR received from the ELC
-	EventResult eventResult;	// reqult of the async operation (read and write operations only)
+	ELCResult eventResult;	// result of the async operation (read and write operations only)
 	//char * pchBuffer;				// exchange buffer used to pass data to or from the order to send to the ELC (read and write operations only)
 } ELCFNC, * PELCFNC;
 
@@ -142,40 +133,46 @@ typedef struct
 	DWORD BaudRate;			// Baudrate at which running
 	int port;					// port used to connect the ELC
 	HANDLE logHandle;			// log file handle
-	HANDLE eventCompleted,	// used to signal the thread the process has been completed
-		eventCancelled,		// used to signal the async thread the process has been cancelled
-		eventError,				// used to signal the async thread the process has encountered an error
+	HANDLE completed,	// used to signal the thread the process has been completed
+		cancelled,		// used to signal the async thread the process has been cancelled
+		error,				// used to signal the async thread the process has encountered an error
 		mutexStopReading,		// used to indicate the thread must continue to read incoming data
 		eventInProgress;		// allows managing async operations access
+	BOOL fCarryOnReading;
 	HANDLE userEventCompleted,
 		userEventCancelled,
 		userEventTimeout,
-		userEventError;
-	DWORD timerInitiateRequest,// timer used while initiating a request exchange
-		timerTerminateRequest,	// timer used while terminating a request exchange
-		timerInitiateReply,		// timer used while initiating a reply exchange
-		timerTerminateReply,		// timer used while terminating a reply request exchange
-		timerSendOrder,			// timer used while sending an order command to the ELC (status, abort, read, write)
-		receiveAttemps;			// number of attempts when trying to receive data from the ELC
-	DWORD T0,
-		T1,
+		userEventError,
+		startTimer,
+		startTimerEvent,			// signaled when the timer has indeed been started
+		asyncOperationEndedEvent;	// application given asyncOperationEndedEvent signaled when an async operation terminates
+	DWORD T1,
 		T2,
+		TA,
 		TR,
 		TRA,
-		TD;
+		TD,
+		timerBeforeAbort;
 	ELCFNC status,
 		abort,
 		read,
 		write;
 	PELCFNC pCurrentFnc;
 	REPLYCR CR;					// the last CR received from the ELC
+	int N1, N2;
 } ELCSTRUCT, * PELCSTRUCT;
 #define MYPELC									((PELCSTRUCT)pelc)
 #define MYPELCSTRUCT							PELCSTRUCT pelcstruct = (PELCSTRUCT)pelc;
 #define MYFNC(_FnC_)							MYPELC->pCurrentFnc=&_FnC_;
 #define MYPFNC									MYPELC->pCurrentFnc
 #define MYPELCEX(_PeLC_)					((PELCSTRUCT)_PeLC_)
-#define LOGCRLF								LOG(pelc, NULL, true)
+#define LOG(_tExT_,_nEwLiNe_)				AddLog(pelc, _tExT_, _nEwLiNe_, false)
+#define LOGCRLF								AddLog(pelc, NULL, true, false)
+#define LOGDATETIME(_PsZ_)					AddDateTime(pelc, (char*)_PsZ_)
+#define LOGONLY(_tExT_)						AddLog(pelc, _tExT_, true, true)
+#define LOGEX(_tExT_,_V_,_nEwLiNe_)		AddLogEx(pelc, _tExT_, _V_, _nEwLiNe_, false)
+#define LOGONLYEX(_tExT_,_V_)				AddLogEx(pelc, _tExT_, _V_, true, true)
+#define LOGLASTERROR(__PsZ__,_ErR_)		AddLogLastError(pelc, __PsZ__,_ErR_)
 
 static char STATUS_REQUEST[COMMAND_SIZE + 1] = { 0x30, 0x30, 0x34, 0x00 };
 static char STATUS_REQUEST_EX[1] = { 0x00 };
@@ -198,15 +195,20 @@ static char READ_REPLY[COMMAND_SIZE + 1] = { 0x31, 0x34, 0x30 ,0x00 };
 static char READ_REPLY_CR[CR_SIZE] = { 0x01, 0x02, 0x03 };
 static char READ_REPLY_EX[2] = { 0x68 , 0x00 };
 
-static char WRITE_REQUEST[COMMAND_SIZE + 1] = { 0x30, 0x31, 0x30, 0x00 };	// write order
-static char WRITE_REQUEST_EX[6] = { 0x65, 0x30, 0x30, 0x30, 0x30 ,0x00 };	// additional write order
-static char WRITE_REPLY[COMMAND_SIZE + 1] = { 0x31, 0x34, 0x30,0x00 };	// expected reply
+static char WRITE_REQUEST[COMMAND_SIZE + 1] = { 0x30, 0x31, 0x30, 0x00 };
+static char WRITE_REQUEST_EX[6] = { 0x65, 0x30, 0x30, 0x30, 0x30 ,0x00 };
+static char WRITE_REPLY[COMMAND_SIZE + 1] = { 0x30, 0x35, 0x30,0x00 };
 static char WRITE_REPLY_CR[CR_SIZE] = { 0x01, 0x02, 0x00 };
-static char WRITE_REPLY_EX[1] = { 0x00 };	// expected additional reply
+static char WRITE_REPLY_EX[1] = { 0x00 };
+
+static const char* STATUS_FNC = "STATUS ORDER";
+static const char* ABORT_FNC = "ABORT ORDER";
+static const char* READ_FNC = "READ ORDER";
+static const char* WRITE_FNC = "WRITE ORDER";
 
 // protocol timers
-#define TT0										10
-#define SLEEPT0								Sleep(MYPELC->T0)
+#define TTA										10
+#define SLEEPTA								Sleep(MYPELC->TA)
 #define TT1										500
 #define SLEEPT1								Sleep(MYPELC->T1)
 #define TT2										1000
@@ -243,64 +245,10 @@ static char WRITE_REPLY_EX[1] = { 0x00 };	// expected additional reply
 #pragma region tools
 
 /// <summary>
-/// Log to the log file
-/// </summary>
-/// <param name="psz">Text to log</param>
-/// <param name="addCRLFBefore">If true add a CRLF before the text to add</param>
-DRIVERAPI void __stdcall LOG(ELC pelc, const char * psz, bool addCRLFBefore)
-{
-	MYPELCSTRUCT;
-	if (NO_FILE != MYPELC->logHandle)
-	{
-		DWORD dwWritten;
-		if (addCRLFBefore)
-		{
-			char * crlf = (char *)"\r\n";
-			SetFilePointer(MYPELC->logHandle, 0, NULL, FILE_END);
-			WriteFile(MYPELC->logHandle,
-						 crlf,
-						 strlen(crlf),
-						 &dwWritten,
-						 NULL);
-			std::cout << std::endl;
-		}
-		if (NULL != psz)
-		{
-			SetFilePointer(MYPELC->logHandle, 0, NULL, FILE_END);
-			WriteFile(MYPELC->logHandle,
-						 psz,
-						 strlen(psz),
-						 &dwWritten,
-						 NULL);
-			std::cout << psz;
-		}
-	}
-}
-
-/// <summary>
-/// Format and log a message
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="psz">Message to log</param>
-/// <param name="value">Eventually value to log</param>
-/// <param name="addCRLFBefore">If true add a CRLF before the text to add</param>
-DRIVERAPI void __stdcall LOGEX(ELC pelc, const char * psz, int value, bool addCRLFBefore)
-{
-	MYPELCSTRUCT;
-	char * format;
-	char * format1 = (char *)"%s";
-	char * format2 = (char *)"%s (%d)";
-	char dummy[ONEKB];
-	format = (0 == value ? format1 : format2);
-	sprintf_s(dummy, sizeof(dummy), format, psz, value);
-	LOG(pelc, dummy, addCRLFBefore);
-}
-
-/// <summary>
 /// Release a memory buffer and resets the pointer itself
 /// </summary>
 /// <param name="pp">Pointer to pointer of the buffer to release</param>
-DRIVERAPI void __stdcall FREE(char ** pp)
+static void FREE(char** pp)
 {
 	if (NULL != *pp)
 	{
@@ -314,16 +262,120 @@ DRIVERAPI void __stdcall FREE(char ** pp)
 /// </summary>
 /// <param name="size">Size of buffer to allocate</param>
 /// <returns>A pointer to a buffer is successfull, NULL otherwise</returns>
-DRIVERAPI char * __stdcall CALLOC(size_t size)
+static char* CALLOC(size_t size)
 {
 	if (0 != size)
 	{
-		char * pv = (char *)calloc(1, size);
+		char* pv = (char*)calloc(1, size);
 		if (NULL != pv)
 			memset(pv, 0, size);
 		return pv;
 	}
 	return NULL;
+}
+
+/// <summary>
+/// AddLog to the log file
+/// </summary>
+/// <param name="psz">Text to log</param>
+/// <param name="addCRLF">If true add a CRLF before the text</param>
+static void AddLog(ELC pelc, const char* psz, BOOL addCRLF, BOOL fileOnly)
+{
+	MYPELCSTRUCT;
+	if (addCRLF)
+	{
+		if (!fileOnly)
+			std::cout << std::endl;
+		if (NO_FILE != MYPELC->logHandle)
+		{
+			DWORD dwWritten;
+			char* crlf = (char*)"\r\n";
+			SetFilePointer(MYPELC->logHandle, 0, NULL, FILE_END);
+			WriteFile(MYPELC->logHandle,
+				crlf,
+				strlen(crlf),
+				&dwWritten,
+				NULL);
+		}
+	}
+	if (NULL != psz)
+	{
+		DWORD dwWritten;
+		if (!fileOnly)
+			std::cout << psz;
+		SetFilePointer(MYPELC->logHandle, 0, NULL, FILE_END);
+		WriteFile(MYPELC->logHandle,
+			psz,
+			strlen(psz),
+			&dwWritten,
+			NULL);
+	}
+}
+
+/// <summary>
+/// 
+/// </summary>
+/// <param name="pelc"></param>
+/// <param name="psz"></param>
+static void AddDateTime(ELC pelc, char* psz)
+{
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	char date[ONEKB];
+	if (0 != GetDateFormat(LOCALE_USER_DEFAULT, NULL, &st, "yyyy'/'MM'/'dd", date, _countof(date)))
+	{
+		char time[ONEKB];
+		if (0 != GetTimeFormat(LOCALE_USER_DEFAULT, NULL, &st, "HH':'mm':'ss", time, _countof(time)))
+		{
+			char dummy[ONEKB * 5];
+			if (NULL == psz)
+				sprintf_s(dummy, "%s %s", date, time);
+			else
+				sprintf_s(dummy, "+++ %s - %s %s +++", psz, date, time);
+			LOG(dummy, NULL != psz);
+		}
+	}
+}
+
+/// <summary>
+/// Format and log a message
+/// </summary>
+/// <param name="pelc"></param>
+/// <param name="psz">Message to log</param>
+/// <param name="value">Eventually value to log</param>
+/// <param name="addCRLF">If true add a CRLF before the text to add</param>
+void AddLogEx(ELC pelc, const char* psz, int value, BOOL addCRLF, BOOL fileOnly)
+{
+	MYPELCSTRUCT;
+	char dummy[ONEKB];
+	//sprintf_s(dummy, sizeof(dummy), "%s [%u]", psz, value);
+	sprintf_s(dummy, "%s [%u]", psz, value);
+	AddLog(pelc, dummy, addCRLF, fileOnly);
+}
+
+/// <summary>
+/// Prepare an explanation for system last error
+/// </summary>
+/// <param name="pelc"></param>
+/// <param name="dwError"></param>
+/// <returns>String describing </returns>
+static void AddLogLastError(ELC pelc, const char* psz, DWORD dwError)
+{
+	MYPELCSTRUCT;
+	LPCTSTR strErrorMessage = NULL;
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ARGUMENT_ARRAY | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+		NULL,
+		dwError,
+		0,
+		(LPSTR)&strErrorMessage,
+		0,
+		NULL);
+	DWORD size = strlen(psz) + strlen(strErrorMessage) + ONEKB;
+	char* pdummy = CALLOC(size);
+	sprintf_s(pdummy, size, "%s [Error: %u - %s]", psz, dwError, strErrorMessage);
+	LOG(pdummy, false);
+	FREE(&pdummy);
+	LocalFree((void*)strErrorMessage);
 }
 
 #pragma endregion
@@ -336,7 +388,7 @@ DRIVERAPI char * __stdcall CALLOC(size_t size)
 /// <param name="buffer">Buffer which will receive the string</param>
 /// <param name="size">Size of buffer to allocate</param>
 /// <returns></returns>
-static char * RawRepresentation(char b, char * buffer, int size)
+static char* RawRepresentation(char b, char* buffer, int size)
 {
 	sprintf_s(buffer, size, "%0.2X", b);
 	return buffer;
@@ -349,7 +401,7 @@ static char * RawRepresentation(char b, char * buffer, int size)
 /// <param name="buffer">Buffer which will receive the string</param>
 /// <param name="size">Size of buffer to allocate</param>
 /// <returns></returns>
-static char * ConvertedRepresentation(char b, char * buffer, int size)
+static char* ConvertedRepresentation(char b, char* buffer, int size)
 {
 	switch (b)
 	{
@@ -387,17 +439,18 @@ static char * ConvertedRepresentation(char b, char * buffer, int size)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-static bool AllowReading(ELC pelc)
+static BOOL AllowReading(ELC pelc)
 {
 	MYPELCSTRUCT;
 	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, 0))
 	{
+	case WAIT_OBJECT_0:
+		MYPELC->fCarryOnReading = true;
+		ReleaseMutex(MYPELC->mutexStopReading);
+		return true;
 	case WAIT_ABANDONED:
 	case WAIT_FAILED:
 	case WAIT_TIMEOUT:
-		return false;
-	case WAIT_OBJECT_0:
-		return true;
 	default:
 		return false;
 	}
@@ -408,11 +461,21 @@ static bool AllowReading(ELC pelc)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-static bool ForbidReading(ELC pelc)
+static BOOL ForbidReading(ELC pelc)
 {
 	MYPELCSTRUCT;
-	bool f = ReleaseMutex(MYPELC->mutexStopReading);
-	return f;
+	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, 0))
+	{
+	case WAIT_OBJECT_0:
+		MYPELC->fCarryOnReading = false;
+		ReleaseMutex(MYPELC->mutexStopReading);
+		return true;
+	case WAIT_ABANDONED:
+	case WAIT_FAILED:
+	case WAIT_TIMEOUT:
+	default:
+		return false;
+	}
 }
 
 /// <summary>
@@ -422,15 +485,23 @@ static bool ForbidReading(ELC pelc)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-static bool CanContinueReading(ELC pelc)
+static BOOL CanContinueReading(ELC pelc)
 {
 	MYPELCSTRUCT;
-	if (WAIT_OBJECT_0 == WaitForSingleObject(MYPELC->mutexStopReading, 0))
+	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, INFINITE))
 	{
+	case WAIT_OBJECT_0:
+	{
+		BOOL result = MYPELC->fCarryOnReading;
 		ReleaseMutex(MYPELC->mutexStopReading);
+		return result;
+	}
+	//case WAIT_ABANDONED:
+	//case WAIT_FAILED:
+	//case WAIT_TIMEOUT:
+	default:
 		return false;
 	}
-	return true;
 }
 
 /// <summary>
@@ -441,25 +512,22 @@ static bool CanContinueReading(ELC pelc)
 /// <param name="length">Length of data to write</param>
 /// <param name="piWritten">Number of characters written</param>
 /// <param name="pdwError">Error if any (from GetLastError)</param>
-/// <param name="dwTimeout">Timer to wait for</param>
 /// <returns></returns>
-static bool WriteData(ELC pelc, char * data, int length, int * piWritten, LPDWORD pdwError, DWORD dwTimeout)
+static BOOL WriteData(ELC pelc, char* data, int length, int* piWritten, LPDWORD pdwError)
 {
 	MYPELCSTRUCT;
-	bool success = false;
+	BOOL success = false;
 	char dummy[ONEKB];
 
-#ifdef DOOVERLAPPING
-
 	OVERLAPPED o = { };
-	o.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	o.hEvent = CreateEvent(NULL, false, false, NULL);
 	if (NULL != o.hEvent)
 	{
 		if (!(success = WriteFile(MYPELC->handle, (LPCVOID)data, (DWORD)length, NULL, &o)))
 		{
 			if (ERROR_IO_PENDING == (*pdwError = GetLastError()))
 			{
-				if (WAIT_OBJECT_0 == (*pdwError = WaitForSingleObject(o.hEvent, (DWORD)dwTimeout)))
+				if (WAIT_OBJECT_0 == (*pdwError = WaitForSingleObject(o.hEvent, (DWORD)WRITE_COMMAND_TIMER)))
 				{
 					if (GetOverlappedResult(MYPELC->handle, &o, (LPDWORD)piWritten, FALSE))
 						success = true;
@@ -473,25 +541,19 @@ static bool WriteData(ELC pelc, char * data, int length, int * piWritten, LPDWOR
 		CloseHandle(o.hEvent);
 	}
 
-#else
-
-	success = WriteFile(MYPELC->handle, (LPCVOID)data, length, (LPDWORD)piWritten, NULL);
-
-#endif // DOOVERLAPPING
-
 	if (success)
 	{
-		LOG(pelc, " - WRITE OK ", false);
+		LOG(" - WRITE OK ", false);
 		if (0 == *piWritten)
-			LOG(pelc, "- NO DATA WRITTEN", false);
+			LOG("- NO DATA WRITTEN", false);
 		else
 		{
-			bool fRaw = false;
-			LOG(pelc, "- DATA: ", false);
+			BOOL fRaw = false;
+			LOG("- DATA: ", false);
 			for (int i = 1; *piWritten >= i; i++)
 			{
-				LOG(pelc, (fRaw ? RawRepresentation(data[i - 1], dummy, sizeof(dummy)) : ConvertedRepresentation(data[i - 1], dummy, sizeof(dummy))), false);
-				LOG(pelc, " ", false);
+				LOG((fRaw ? RawRepresentation(data[i - 1], dummy, sizeof(dummy)) : ConvertedRepresentation(data[i - 1], dummy, sizeof(dummy))), false);
+				LOG(" ", false);
 				fRaw = (ETX == data[i - 1]);
 			}
 		}
@@ -499,8 +561,9 @@ static bool WriteData(ELC pelc, char * data, int length, int * piWritten, LPDWOR
 	else
 	{
 		DWORD dw = GetLastError();
-		sprintf_s(dummy, ONEKB, " - WRITE KO (%d)", dw);// *pdwError);
-		LOG(pelc, dummy, true);
+		//sprintf_s(dummy, sizeof(dummy), " - WRITE KO (%u)", dw);// *pdwError);
+		sprintf_s(dummy, " - WRITE KO (%u)", dw);// *pdwError);
+		LOG(dummy, false);
 	}
 
 	success = success && *piWritten == length;
@@ -516,20 +579,19 @@ static bool WriteData(ELC pelc, char * data, int length, int * piWritten, LPDWOR
 /// <param name="piRead">Number of characters read</param>
 /// <param name="pdwError">Error if any (from GetLastError)</param>
 /// <param name="dwTimeout">Timer to wait for</param>
+/// <param name="pfTimeout">True is ended with timeout, false otherwise</param>
 /// <returns></returns>
-static bool ReadData(ELC pelc, char * data, int length, LPDWORD pdwRead, LPDWORD pdwError, DWORD dwTimeout)
+static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD pdwError, DWORD dwTimeout, BOOL* pfTimeout)
 {
 	MYPELCSTRUCT;
-	bool success = false;
-	bool keepCarryOn = true;
-
-#ifdef DOOVERLAPPING
+	BOOL success = false;
+	BOOL keepCarryOn = true;
+	*pfTimeout = false;
 
 	OVERLAPPED o = { 0 };
 	o.hEvent = CreateEvent(NULL, false, false, NULL);
 	if (NULL != o.hEvent)
 	{
-		HANDLE handles[] = { o.hEvent, MYPELC->mutexStopReading };
 		*pdwRead = 0;
 		while (keepCarryOn)
 		{
@@ -540,18 +602,20 @@ static bool ReadData(ELC pelc, char * data, int length, LPDWORD pdwRead, LPDWORD
 				keepCarryOn = false;
 				if (ERROR_IO_PENDING == (*pdwError = GetLastError()))
 				{
-					switch (DWORD dw = WaitForMultipleObjects(_countof(handles), handles, false, INFINITE))
+					HANDLE handles[] = { o.hEvent, MYPELC->mutexStopReading };
+					switch (DWORD dw = WaitForMultipleObjects(_countof(handles), handles, false, dwTimeout))
 					{
 					case WAIT_FAILED:
-						*pdwError = GetLastError();
+						LOGLASTERROR("WAIT_FAILED", *pdwError = GetLastError());
 						break;
 
 					case WAIT_TIMEOUT:
-						*pdwError = GetLastError();
+						*pfTimeout = true;
+						LOGLASTERROR("WAIT_TIMEOUT", *pdwError = GetLastError());
 						break;
 
 					case WAIT_ABANDONED_0:
-						*pdwError = GetLastError();
+						LOGLASTERROR("WAIT_ABANDONED", *pdwError = GetLastError());
 						break;
 
 					case WAIT_OBJECT_0:
@@ -561,95 +625,71 @@ static bool ReadData(ELC pelc, char * data, int length, LPDWORD pdwRead, LPDWORD
 							if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
 							{
 								success = true;
-								if (keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc))
-									SLEEPT0;
+								keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
+								LOGONLY("WAIT_OBJECT: OVERLAPPED");
 							}
 							else
 							{
-								*pdwError = GetLastError();
-								//if (ERROR_IO_INCOMPLETE)
+								LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
 							}
 							break;
 
 						case 1: // stop reading
+							LOGONLY("WAIT_OBJECT: STOP READING ");
 							break;
 
 						default:
-							*pdwError = GetLastError();
+							LOGLASTERROR("WAIT_OBJECT", *pdwError = GetLastError());
 							break;
 						}
 						break;
 
 					default:
-						*pdwError = GetLastError();
+						//switch (*pdwError)
+						//{
+							/* this is the error reported using the native USB cable delivered with the ELC (cp210x by Silicon Labs)
+							*  but when receiving that error using GetOverlappedResult either never returns (if using true when calling the function
+							*  or keeps giving the same error (if using false when calling the function) => it doesn't work at all, remove comment
+							*  at your own risks */
+							//case 997:
+							//	if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
+							//	{
+							//		success = true;
+							//		keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
+							//		LOGONLY("WAIT_OBJECT: OVERLAPPED");
+							//	}
+							//	else
+							//	{
+							//		LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
+							//	}
+							//	break;
+						//default:
+						LOGLASTERROR("READFILE", *pdwError = GetLastError());
+						//	break;
+						//}
 						break;
 					}
 				}
 				else
 				{
-					*pdwError = GetLastError();
+					LOGLASTERROR("WAIT_UNKNOWN", *pdwError = GetLastError());
 				}
 			}
 			else
 			{
 				if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
 				{
-					if (keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc))
-						SLEEPT0;
+					keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
 				}
 				else
 				{
+					LOGLASTERROR("OVERLAPPEDRESULT", *pdwError = GetLastError());
 					keepCarryOn = false;
 				}
 			}
 		}
 		CloseHandle(o.hEvent);
 	}
-#else
-	do
-	{
-		if (success = ReadFile(MYPELC->handle, data, length, (LPDWORD)piRead, NULL))
-		{
-			if (fContinue = (0 == *pdwRead && CanContinueReading(pelc)))
-				SLEEPT0;
-		}
-	}
-	while (fContinue && success);
-
-
-#endif // DOOVERLAPPING
-
-	//	if (success)
-	//	{
-	//#ifdef GETORDEREX
-	//		if (fStart)
-	//#endif // GETORDEREX
-	//			LOG(pelc, " - READ OK ", false);
-	//		if (0 == *pdwRead && 0 != length)
-	//			LOG(pelc, "- NO DATA RECEIVED", false);
-	//		else if (0 != *pdwRead)
-	//		{
-	//			bool fRaw = false;
-	//#ifdef GETORDEREX
-	//			if (fStart)
-	//#endif // GETORDEREX
-	//				LOG(pelc, "- DATA: ", false);
-	//			for (DWORD i = 1; *pdwRead >= i; i++)
-	//			{
-	//				LOG(pelc, (fRaw ? RawRepresentation(data[i - 1], (char *)dummy, ONEKB) : ConvertedRepresentation(data[i - 1], (char *)dummy, ONEKB)), false);
-	//				LOG(pelc, " ", false);
-	//				//fRaw = fRaw || (ETX == data[i - 1]);
-	//				fRaw = (ETX == data[i - 1]);
-	//			}
-	//		}
-	//	}
-	//	else
-	//	{
-	//		DWORD dw = GetLastError();
-	//		sprintf_s(dummy, ONEKB, " - READ KO (%d)", dw);// *pdwError);
-	//		LOG(pelc, dummy, false);
-	//	}
-
 	return success;
 }
 
@@ -672,7 +712,7 @@ static void CloseMyHandle(HANDLE h)
 /// <param name="pelc"></param>
 /// <param name="fAcquireMutex">If true the mutex can be acquired, if false the mutex is released if acquired</param>
 /// <returns>True if within an async operation, false otherwise</returns>
-static bool IsInProgress(ELC pelc, bool fAcquireMutex)
+static BOOL IsInProgress(ELC pelc, BOOL fAcquireMutex)
 {
 	MYPELCSTRUCT;
 	// veriy an async operation is in progress
@@ -714,6 +754,8 @@ static void RazAsyncEnvironment(ELC pelc)
 	CloseMyHandle(MYPELC->userEventCancelled);
 	CloseMyHandle(MYPELC->userEventTimeout);
 	CloseMyHandle(MYPELC->userEventError);
+	CloseMyHandle(MYPELC->startTimer);
+	MYPELC->startTimer = NULL;
 }
 
 typedef struct
@@ -732,10 +774,17 @@ DWORD WINAPI ThreadAsyncResult(_In_ LPVOID lpParameter)
 	PTHREADPROCASYNCRESULT pthr = (PTHREADPROCASYNCRESULT)lpParameter;
 	ELC pelc = (PELCSTRUCT)pthr->pelc;
 
-	HANDLE handles[] = { MYPELC->eventCompleted, MYPELC->eventCancelled, MYPELC->eventError };
+	HANDLE handles[] = { MYPELC->completed, MYPELC->cancelled, MYPELC->error };
 	// ready to start
 	SetEvent(pthr->started);
-	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, (INFINITE != pthr->timer && 0 < pthr->timer ? pthr->timer * ONESECOND : INFINITE));
+	DWORD timerToStart = (INFINITE != pthr->timer && NO_TIMER < pthr->timer ? pthr->timer * ONESECOND : INFINITE);
+	// wait for processing to start to start timer and warn the caller
+	if (NULL != MYPELC->startTimer)
+		WaitForSingleObject(MYPELC->startTimer, INFINITE);
+	// indicate the calling application it can start its own timer
+	if (NULL != MYPELC->startTimerEvent)
+		SetEvent(MYPELC->startTimerEvent);
+	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, timerToStart);
 	switch (dw)
 	{
 	case WAIT_FAILED:
@@ -746,27 +795,26 @@ DWORD WINAPI ThreadAsyncResult(_In_ LPVOID lpParameter)
 		SetEvent(MYPELC->userEventTimeout);
 		break;
 	default:
+	{
+		int index = dw - WAIT_OBJECT_0;
+		switch (index)
 		{
-			int index = dw - WAIT_OBJECT_0;
-			switch (index)
-			{
-			case 0:
-				SetEvent(MYPELC->userEventCompleted);
-				break;
-			case 1:
-				SetEvent(MYPELC->userEventCancelled);
-				break;
-			default:
-				SetEvent(MYPELC->userEventError);
-				break;
-			}
+		case 0:
+			SetEvent(MYPELC->userEventCompleted);
+			break;
+		case 1:
+			SetEvent(MYPELC->userEventCancelled);
+			break;
+		default:
+			SetEvent(MYPELC->userEventError);
+			break;
 		}
 	}
-	CloseMyHandle(MYPELC->eventCompleted);
-	CloseMyHandle(MYPELC->eventCancelled);
-	CloseMyHandle(MYPELC->eventError);
+	}
+	CloseMyHandle(MYPELC->completed);
+	CloseMyHandle(MYPELC->cancelled);
+	CloseMyHandle(MYPELC->error);
 	CloseHandle(pthr->started);
-	ForbidReading(pelc);
 	free(pthr);
 	return 0;
 }
@@ -777,23 +825,23 @@ DWORD WINAPI ThreadAsyncResult(_In_ LPVOID lpParameter)
 /// <param name="pelc"></param>
 /// <param name="iTimer"></param>
 /// <returns></returns>
-static bool StartAsyncResultThread(ELC pelc, int iTimer)
+static BOOL StartAsyncResultThread(ELC pelc, int iTimer)
 {
 	MYPELCSTRUCT;
 	PTHREADPROCASYNCRESULT pthr = (PTHREADPROCASYNCRESULT)CALLOC(sizeof(THREADPROCASYNCRESULT));
 	pthr->pelc = pelc;
 	pthr->timer = iTimer;
-	pthr->started = CreateEvent(NULL, true, false, NULL);
-	MYPELC->eventCompleted = CreateEvent(NULL, true, false, NULL);
-	MYPELC->eventCancelled = CreateEvent(NULL, true, false, NULL);
-	MYPELC->eventError = CreateEvent(NULL, true, false, NULL);
+	pthr->started = CreateEvent(NULL, false, false, NULL);
+	MYPELC->completed = CreateEvent(NULL, false, false, NULL);
+	MYPELC->cancelled = CreateEvent(NULL, false, false, NULL);
+	MYPELC->error = CreateEvent(NULL, false, false, NULL);
 	HANDLE h = CreateThread(NULL, ONEKB * 50, ThreadAsyncResult, pthr, 0, NULL);
 	if (NULL != pthr->started)
 		WaitForSingleObject(pthr->started, INFINITE);
 	if (NULL == h)
 	{
-		CloseMyHandle(MYPELC->eventCompleted);
-		CloseMyHandle(MYPELC->eventCancelled);
+		CloseMyHandle(MYPELC->completed);
+		CloseMyHandle(MYPELC->cancelled);
 		return false;
 	}
 	return true;
@@ -803,9 +851,14 @@ static bool StartAsyncResultThread(ELC pelc, int iTimer)
 /// Prepare async environment
 /// </summary>
 /// <param name="pelc"></param>
-static void PrepareAsyncEnvironment(ELC pelc)
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
+static void PrepareAsyncEnvironment(ELC pelc, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
+	MYPELC->asyncOperationEndedEvent = asyncOperationEndedEvent;
+	MYPELC->startTimerEvent = startTimerEvent;
+	MYPELC->startTimer = CreateEvent(NULL, true, false, NULL);
 	MYPELC->userEventCompleted = CreateEvent(NULL, true, false, NULL);
 	MYPELC->userEventTimeout = CreateEvent(NULL, true, false, NULL);
 	MYPELC->userEventCancelled = CreateEvent(NULL, true, false, NULL);
@@ -820,10 +873,10 @@ static void PrepareAsyncEnvironment(ELC pelc)
 /// Retrieve the COM port used by the ELC when connected using a USB cable
 /// </summary>
 /// <param name="usbDriver">USD driver to try to open</param>
-/// <returns>COM port if found, NO_DRIVER otherwise</returns>
-static int GetUSBComPort(char * usbDriver)
+/// <returns>COM port if found, NO_COM_PORT otherwise</returns>
+DRIVERAPI int __stdcall ELCGetUSBComPort(char* usbDriver)
 {
-	int result = NO_DRIVER;
+	int result = NO_COM_PORT;
 	HDEVINFO DeviceInfoSet;
 	DWORD dwDeviceIndex = 0;
 	SP_DEVINFO_DATA DeviceInfoData;
@@ -847,14 +900,14 @@ static int GetUSBComPort(char * usbDriver)
 	DeviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
 	//Receive information about an enumerated device
-	while (SetupDiEnumDeviceInfo(DeviceInfoSet, dwDeviceIndex, &DeviceInfoData) && NO_DRIVER == result)
+	while (SetupDiEnumDeviceInfo(DeviceInfoSet, dwDeviceIndex, &DeviceInfoData) && NO_COM_PORT == result)
 	{
 		dwDeviceIndex++;
 		//Retrieves a specified Plug and Play device property
 		if (SetupDiGetDeviceRegistryProperty(DeviceInfoSet, &DeviceInfoData, SPDRP_HARDWAREID, &ulPropertyType, (PBYTE)szBuffer, sizeof(szBuffer), &dwSize))
 		{
 			HKEY hDeviceRegistryKey;
-			if (0 == _strnicmp(szBuffer, ExpectedDeviceId, __min(strlen((char *)ExpectedDeviceId), strlen(szBuffer))))
+			if (0 == _strnicmp(szBuffer, ExpectedDeviceId, __min(strlen((char*)ExpectedDeviceId), strlen(szBuffer))))
 			{
 				//Get the key
 				hDeviceRegistryKey = SetupDiOpenDevRegKey(DeviceInfoSet, &DeviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
@@ -873,9 +926,9 @@ static int GetUSBComPort(char * usbDriver)
 					if ((RegQueryValueEx(hDeviceRegistryKey, "PortName", NULL, &dwType, (LPBYTE)pszPortName, &dwSize) == ERROR_SUCCESS) && (dwType == REG_SZ))
 					{
 						// Check if it is really a com port
-						if (0 == _strnicmp((TCHAR *)pszPortName, "COM", 3))
+						if (0 == _strnicmp((TCHAR*)pszPortName, "COM", 3))
 						{
-							result = atoi((TCHAR *)pszPortName + 3);
+							result = atoi((TCHAR*)pszPortName + 3);
 						}
 					}
 					// Close the key now that we are finished with it
@@ -897,16 +950,25 @@ static int GetUSBComPort(char * usbDriver)
 /// <returns></returns>
 static int GetComPort()
 {
-	char * ELC_NATIVE_USB_DRIVER = (char *)"USB\\VID_10C4&PID_EA60";
-	char * ATEN_USB_DRIVER = (char *)"USB\\VID_0557&PID_2022";
+	char* ELC_NATIVE_USB_DRIVER = (char*)"USB\\VID_10C4&PID_EA60";
+	char* ATEN_USB_DRIVER = (char*)"USB\\VID_0557&PID_2022";
 	int port;
 
 	// check all USB drivers
-	if (NO_DRIVER == (port = GetUSBComPort(ATEN_USB_DRIVER)))
-		if (NO_DRIVER == (port = GetUSBComPort(ELC_NATIVE_USB_DRIVER)))
+	if (NO_COM_PORT == (port = ELCGetUSBComPort(ATEN_USB_DRIVER)))
+		if (NO_COM_PORT == (port = ELCGetUSBComPort(ELC_NATIVE_USB_DRIVER)))
 			port = port;
 	// return fournd port (if any)
 	return port;
+}
+
+/// <summary>
+/// Purge COM queue
+/// </summary>
+/// <param name="pelc"></param>
+static void PurgeCommunication(ELC pelc)
+{
+	PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 }
 
 /// <summary>
@@ -915,10 +977,10 @@ static int GetComPort()
 /// <param name="pelc"></param>
 /// <param name="speed"></param>
 /// <returns></returns>
-static bool SetCommunicationState(ELC pelc, bool first, char eofChar)
+static BOOL SetCommunicationState(ELC pelc, BOOL first, char eofChar)
 {
 	MYPELCSTRUCT;
-	bool result = false;
+	BOOL result = false;
 	char dummy[ONEKB];
 	DCB dcb;
 	// set serial port exchange conditions
@@ -945,11 +1007,13 @@ static bool SetCommunicationState(ELC pelc, bool first, char eofChar)
 		ELCClose(pelc);
 	else
 	{
+		LOGCRLF;
 		SLEEPAFTERSETCOMMSTATE;
 		GetCommState(MYPELC->handle, &dcb);
 		memcpy(&MYPELC->dcbCurrent, &dcb, sizeof(DCB));
-		sprintf_s(dummy, sizeof(dummy), "OPENING COM%d\n\tSpeed: %d\n\t%d data bits\n\t%s stop bit(s)\n\t%s parity\n", MYPELC->port, dcb.BaudRate, dcb.ByteSize, (ONESTOPBIT == dcb.StopBits ? "1" : ONE5STOPBITS == dcb.StopBits ? "1.5" : "2"), (EVENPARITY == dcb.Parity ? "EVEN (paire)" : ODDPARITY == dcb.Parity ? "ODD (impaire)" : NOPARITY == dcb.Parity ? "NO" : "OTHER"));
-		LOG(pelc, dummy, true);
+		//sprintf_s(dummy, sizeof(dummy), "OPENING COM%u\n\tSpeed: %u\n\t%u data bits\n\t%s stop bit(s)\n\t%s parity\n", MYPELC->port, dcb.BaudRate, dcb.ByteSize, (ONESTOPBIT == dcb.StopBits ? "1" : ONE5STOPBITS == dcb.StopBits ? "1.5" : "2"), (EVENPARITY == dcb.Parity ? "EVEN (paire)" : ODDPARITY == dcb.Parity ? "ODD (impaire)" : NOPARITY == dcb.Parity ? "NO" : "OTHER"));
+		sprintf_s(dummy, "OPENING COM%u\n\tSpeed: %u\n\t%u data bits\n\t%s stop bit(s)\n\t%s parity\n", MYPELC->port, dcb.BaudRate, dcb.ByteSize, (ONESTOPBIT == dcb.StopBits ? "1" : ONE5STOPBITS == dcb.StopBits ? "1.5" : "2"), (EVENPARITY == dcb.Parity ? "EVEN (paire)" : ODDPARITY == dcb.Parity ? "ODD (impaire)" : NOPARITY == dcb.Parity ? "NO" : "OTHER"));
+		LOG(dummy, true);
 	}
 	return result;
 }
@@ -968,37 +1032,39 @@ static bool SetCommunicationState(ELC pelc, bool first, char eofChar)
 /// <param name="pdwReceived"></param>
 /// <param name="pdwError"></param>
 /// <param name="psz"></param>
-static void DisplayReceivedBuffer(ELC pelc, bool result, char * pb, int size, DWORD dwReceived, DWORD dwError, const char * psz)
+static void DisplayReceivedBuffer(ELC pelc, BOOL result, char* pb, int size, DWORD dwReceived, DWORD dwError, DWORD dwTimeout, const char* psz)
 {
 	char dummy[ONEKB];
 	if (result)
 	{
-		if (NULL != psz)
-			LOG(pelc, " - READ OK ", false);
-		if (0 == dwReceived && 0 != size)
+		if (0 == dwReceived)// && 0 != size)
 		{
 			if (NULL != psz)
-				LOG(pelc, "- NO DATA RECEIVED", false);
+			{
+				sprintf_s(dummy, "- TIMEOUT [%u]", dwTimeout);
+				LOG(dummy, false);
+			}
 		}
-		else if (0 != dwReceived)
+		else //if (0 != dwReceived)
 		{
-			bool fRaw = false;
 			if (NULL != psz)
-				LOG(pelc, "- DATA: ", false);
+				LOG(" - READ OK ", false);
+
+			BOOL fRaw = false;
+			if (NULL != psz)
+				LOG("- DATA: ", false);
 			for (DWORD i = 1; dwReceived >= i; i++)
 			{
-				LOG(pelc, (fRaw ? RawRepresentation(pb[i - 1], (char *)dummy, sizeof(dummy)) : ConvertedRepresentation(pb[i - 1], (char *)dummy, sizeof(dummy))), false);
-				LOG(pelc, " ", false);
-				//fRaw = fRaw || (ETX == data[i - 1]);
+				//sprintf_s(dummy, sizeof(dummy), "%s ", (fRaw ? RawRepresentation(pb[i - 1], dummy, sizeof(dummy)) : ConvertedRepresentation(pb[i - 1], dummy, sizeof(dummy))));
+				sprintf_s(dummy, "%s ", (fRaw ? RawRepresentation(pb[i - 1], dummy, sizeof(dummy)) : ConvertedRepresentation(pb[i - 1], dummy, sizeof(dummy))));
+				LOG(dummy, false);
+				//fRaw = fRaw || (ETX == pb[i - 1]);
 				fRaw = (ETX == pb[i - 1]);
 			}
 		}
 	}
 	else
-	{
-		sprintf_s(dummy, ONEKB, " - READ KO (%d)", dwError);
-		LOG(pelc, dummy, false);
-	}
+		LOGLASTERROR(psz, dwError);
 }
 
 /// <summary>
@@ -1010,45 +1076,27 @@ static void DisplayReceivedBuffer(ELC pelc, bool result, char * pb, int size, DW
 /// <param name="pdwReceived"></param>
 /// <param name="pdwError"></param>
 /// <param name="dwTimeout"></param>
+/// <param name="pfTimeout"></param>
 /// <param name="psz"></param>
 /// <returns></returns>
-static bool GetReply(ELC pelc, char * pb, int size, LPDWORD pdwReceived, LPDWORD pdwError, DWORD dwTimeout, const char * psz)
+static BOOL GetReply(ELC pelc, char* pb, int size, LPDWORD pdwReceived, LPDWORD pdwError, DWORD dwTimeout, BOOL* pfTimeout, const char* psz)
 {
 #define GETREPLYATTEMPTS 5
 
 	MYPELCSTRUCT;
 
-	bool fOK, fContinue;
-	int nbAttempts = 1;
+	BOOL fOK;
 	char dummy[ONEKB];
 
 	if (NULL != psz)
 	{
 		sprintf_s(dummy, "%s", psz);
-
-#ifdef DOOVERLLAPED
-		LOGEX(pelc, psz, dwTimeout,
-#else
-		LOG(pelc, psz,
-#endif // DOOVERLLAPED
-			 true);
+		LOGEX(psz, dwTimeout, true);
 	}
 
-	do
-	{
-		fOK = ReadData(pelc, pb, size, pdwReceived, pdwError, dwTimeout);
-		SLEEPTR;
-		if (fOK && 0 == *pdwReceived)
-			if (fContinue = GETREPLYATTEMPTS > nbAttempts)
-				nbAttempts++;
-			else
-				fOK = false;
-		else
-			fContinue = false;
-	}
-	while (fContinue && fOK);
-
-	DisplayReceivedBuffer(pelc, fOK, pb, size, *pdwReceived, *pdwError, psz);
+	fOK = ReadData(pelc, pb, size, pdwReceived, pdwError, dwTimeout, pfTimeout);
+	SLEEPTR;
+	DisplayReceivedBuffer(pelc, fOK, pb, size, *pdwReceived, *pdwError, dwTimeout, psz);
 	return fOK;
 }
 
@@ -1062,13 +1110,16 @@ static bool GetReply(ELC pelc, char * pb, int size, LPDWORD pdwReceived, LPDWORD
 /// <param name="dwTimeout">Timer to wait the command for</param>
 /// <param name="psz">Message to log waiting for the command</param>
 /// <returns>True if the received command is the expected one, false otherwise</returns>
-static bool GetCMD(ELC pelc, char chExpectedCommand, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout, const char * psz)
+static BOOL GetCMD(ELC pelc, char chExpectedCommand, char* pchCmd, LPDWORD pdwError, DWORD dwTimeout, BOOL* pfTimeout, const char* psz)
 {
-	bool fOK;
+	BOOL fOK;
 	DWORD dwRead;
+	char dummy[ONEKB];
+	//sprintf_s(dummy, sizeof(dummy), "\tWAITING %s", psz);
+	sprintf_s(dummy, "\tWAITING %s", psz);
 	if (!(fOK = chExpectedCommand == *pchCmd))
 	{
-		if (fOK = GetReply(pelc, pchCmd, 1, &dwRead, pdwError, dwTimeout, psz))
+		if (fOK = GetReply(pelc, pchCmd, 1, &dwRead, pdwError, dwTimeout, pfTimeout, dummy))
 		{
 			fOK = (chExpectedCommand == *pchCmd);
 		}
@@ -1077,15 +1128,16 @@ static bool GetCMD(ELC pelc, char chExpectedCommand, char * pchCmd, LPDWORD pdwE
 	{
 		char dummy[ONEKB];
 		char dummy1[ONEKB];
-		sprintf_s(dummy1, "\t%s HAS ALREADY BEEN RECEIVED", ConvertedRepresentation(chExpectedCommand, (char *)dummy, sizeof(dummy)));
-		LOG(pelc, dummy1, true);
+		//sprintf_s(dummy1, sizeof(dummy1), "\t%s HAS ALREADY BEEN RECEIVED", ConvertedRepresentation(chExpectedCommand, (char*)dummy, sizeof(dummy)));
+		sprintf_s(dummy1, "\t%s HAS ALREADY BEEN RECEIVED", ConvertedRepresentation(chExpectedCommand, (char*)dummy, sizeof(dummy)));
+		LOG(dummy1, true);
 	}
 	return fOK;
 }
-static bool GetACK(ELC pelc, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout) { bool fOK = GetCMD(pelc, ACK, pchCmd, pdwError, dwTimeout, "\tWAITING ACK"); if (fOK) { } return fOK; }
-static bool GetNAK(ELC pelc, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout) { bool fOK = GetCMD(pelc, NAK, pchCmd, pdwError, dwTimeout, "\tWAITING NAK"); if (fOK) { } return fOK; }
-static bool GetENQ(ELC pelc, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout) { bool fOK = GetCMD(pelc, ENQ, pchCmd, pdwError, dwTimeout, "\tWAITING ENQ"); if (fOK) { } return fOK; }
-static bool GetEOT(ELC pelc, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout) { bool fOK = GetCMD(pelc, EOT, pchCmd, pdwError, dwTimeout, "\tWAITING EOT"); return fOK; }
+static BOOL WaitACK(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, ACK, pchCmd, pdwError, MYPELC->T1, pfTimeout, "ACK"); if (fOK) {} return fOK; }
+static BOOL WaitENQ(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, ENQ, pchCmd, pdwError, IsInProgress(pelc, false) ? INFINITE : MYPELC->TA, pfTimeout, "ENQ");	if (fOK) {}	return fOK; }
+static BOOL WaitEOT(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, EOT, pchCmd, pdwError, MYPELC->T1, pfTimeout, "EOT"); return fOK; }
+static BOOL WaitSTX(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, STX, pchCmd, pdwError, MYPELC->T1, pfTimeout, "STX"); return fOK; }
 
 /// <summary>
 /// Send an order to the ELC
@@ -1098,45 +1150,17 @@ static bool GetEOT(ELC pelc, char * pchCmd, LPDWORD pdwError, DWORD dwTimeout) {
 /// <param name="dwTimeout"></param>
 /// <param name="psz"></param>
 /// <returns></returns>
-static bool SendRequest(ELC pelc, char * pchBuffer, int size, int * piSent, LPDWORD pdwError, DWORD dwTimeout, const char * psz)
+static BOOL SendRequest(ELC pelc, char* pchBuffer, int size, int* piSent, LPDWORD pdwError, const char* psz)
 {
 	MYPELCSTRUCT;
-
-#ifdef SENDORDEREX
-	if (1 > size) return false;
-	bool fOK;
-	int sent = 0;
-	// send STX or command
-	if (fOK = WriteData(pelc, pchBuffer, 1, &sent, pdwError, dwTimeout))
-	{
-		*piSent = sent;
-		if (1 < size)
-		{
-			// send data part
-			if (fOK = WriteData(pelc, &pbBuffer[1], size - 1, &sent, pdwError, dwTimeout))
-			{
-				*piSent += sent;
-			}
-		}
-	}
-	return fOK;
-#else
-	bool fOK;
 	char dummy[ONEKB];
-	sprintf_s(dummy, "%s", psz);
-
-#ifdef DOOVERLLAPED
-	LOGEX(pelc, dummy, dwTimeout,
-#else
-	LOG(pelc, dummy,
-#endif // DOOVERLLAPED
-		 true);
-
-	if (fOK = WriteData(pelc, pchBuffer, size, piSent, pdwError, dwTimeout))
-		if (EOT != pchBuffer[0])
-			SLEEPT1;
+	//sprintf_s(dummy, sizeof(dummy), "\tSENDING %s", psz);
+	sprintf_s(dummy, "\tSENDING %s", psz);
+	LOG(dummy, true);
+	BOOL fOK = WriteData(pelc, pchBuffer, size, piSent, pdwError);
+	if (fOK)
+		SLEEPT1;
 	return fOK;
-#endif // SENDORDEREX
 }
 
 /// <summary>
@@ -1147,17 +1171,17 @@ static bool SendRequest(ELC pelc, char * pchBuffer, int size, int * piSent, LPDW
 /// <param name="pdwError">Error if any (from GetLastError)</param>
 /// <param name="psz">Message to log waiting for the command</param>
 /// <returns>True if the command has been sent, false otherwise</returns>
-static bool SendCMD(ELC pelc, char cmd, LPDWORD pdwError, const char * psz)
+static BOOL SendCMD(ELC pelc, char cmd, LPDWORD pdwError, const char* psz)
 {
 	int dw;
 	char buffer[2] = { cmd, 0 };
-	bool fOK = SendRequest(pelc, buffer, strlen((char *)buffer), &dw, pdwError, WRITE_COMMAND_TIMER, psz);
+	BOOL fOK = SendRequest(pelc, buffer, strlen((char*)buffer), &dw, pdwError, psz);
 	return fOK;
 }
-static bool SendENQ(ELC pelc, LPDWORD pdwError) { bool fOK = SendCMD(pelc, ENQ, pdwError, "\tSENDING ENQ"); return fOK; }
-static bool SendACK(ELC pelc, LPDWORD pdwError) { bool fOK = SendCMD(pelc, ACK, pdwError, "\tSENDING ACK"); if (fOK) { SLEEPTRA; } return fOK; }
-static bool SendNAK(ELC pelc, LPDWORD pdwError) { bool fOK = SendCMD(pelc, NAK, pdwError, "\tSENDING NAK"); if (fOK) { SLEEPTRA; } return fOK; }
-static bool SendEOT(ELC pelc, LPDWORD pdwError) { bool fOK = SendCMD(pelc, EOT, pdwError, "\tSENDING EOT"); return fOK; }
+static BOOL SendENQ(ELC pelc, LPDWORD pdwError) { BOOL fOK = SendCMD(pelc, ENQ, pdwError, "ENQ"); return fOK; }
+static BOOL SendACK(ELC pelc, LPDWORD pdwError) { BOOL fOK = SendCMD(pelc, ACK, pdwError, "ACK"); if (fOK) { SLEEPTRA; } return fOK; }
+static BOOL SendNAK(ELC pelc, LPDWORD pdwError) { BOOL fOK = SendCMD(pelc, NAK, pdwError, "NAK"); if (fOK) { SLEEPTRA; } return fOK; }
+static BOOL SendEOT(ELC pelc, LPDWORD pdwError) { BOOL fOK = SendCMD(pelc, EOT, pdwError, "EOT"); return fOK; }
 
 /// <summary>
 /// Compute LRC
@@ -1166,21 +1190,21 @@ static bool SendEOT(ELC pelc, LPDWORD pdwError) { bool fOK = SendCMD(pelc, EOT, 
 /// <param name="buffer"></param>
 /// <param name="size"></param>
 /// <returns></returns>
-static char LRC(ELC pelc, char * buffer, int size)
+static char LRC(ELC pelc, char* buffer, int size)
 {
 	MYPELCSTRUCT;
 	char dummy[ONEKB];
 	char lrc = 0;
-	LOG(pelc, "COMPUTING LRC", true);
-	LOG(pelc, "\tLRC DATA: ", true);
+	LOG("COMPUTING LRC", true);
+	LOG("\tLRC DATA: ", true);
 	for (int i = 1; i <= size; i++)
 	{
-		LOG(pelc, ConvertedRepresentation(buffer[i - 1], dummy, ONEKB), false);
-		LOG(pelc, " ", false);
+		LOG(ConvertedRepresentation(buffer[i - 1], dummy, ONEKB), false);
+		LOG(" ", false);
 		lrc = lrc ^ buffer[i - 1];
 	}
-	LOG(pelc, "\tLRC: ", true);
-	LOG(pelc, RawRepresentation(lrc, (char *)dummy, ONEKB), false);
+	LOG("\tLRC: ", true);
+	LOG(RawRepresentation(lrc, (char*)dummy, ONEKB), false);
 	return lrc;
 }
 
@@ -1189,7 +1213,7 @@ static char LRC(ELC pelc, char * buffer, int size)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>True if open, false otherwise</returns>
-static bool IsOpen(ELC pelc)
+static BOOL IsOpen(ELC pelc)
 {
 	MYPELCSTRUCT;
 	return (NULL != pelc && NO_FILE != MYPELC->handle);
@@ -1200,124 +1224,16 @@ static bool IsOpen(ELC pelc)
 #pragma region dialog management
 
 /// <summary>
-/// Warn the ELC we're going to send him data
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="lastReadCharacter">last read character if any, 0x00 otherwise</param>
-/// <param name="fSendACK">True if must send an ACK</param>
-/// <param name="pdwError">Error if any (from GetLastError)</param>
-/// <param name="dwTimeout">Timer to wait the command reply for</param>
-/// <returns></returns>
-static bool EndReply(ELC pelc, char lastReadCharacter, bool fSendACK, LPDWORD pdwError, DWORD dwTimeout)
-{
-	MYPELCSTRUCT;
-	bool fOK;
-	char buffer[2] = { ENQ, 0 };
-	// send ENQ
-	LOG(pelc, "END RECEIVING", true);
-	if (fOK = (fSendACK ? SendACK(pelc, pdwError) : SendNAK(pelc, pdwError)))
-	{
-		char b = lastReadCharacter;
-		// wait EOT
-		fOK = GetEOT(pelc, &b, pdwError, dwTimeout);
-		// purge COM line to complete
-		PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
-	}
-	return fOK;
-}
-
-/// <summary>
-/// Wait for the ELC to start sending data
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="pdwError">Error if any (from GetLastError)</param>
-/// <param name="dwTimeout">Timer to wait the command for</param>
-/// <returns></returns>
-static bool StartReply(ELC pelc, LPDWORD pdwError, DWORD dwTimeout)
-{
-	MYPELCSTRUCT;
-	bool fOK;
-	char b = 0x00;
-	// wait ENQ
-	LOG(pelc, "START RECEIVING", true);
-	if (fOK = GetENQ(pelc, &b, pdwError, dwTimeout))
-	{
-		// send ACK
-		fOK = SendACK(pelc, pdwError);
-	}
-	else
-	{
-		// got inappropriate response
-		SendEOT(pelc, pdwError);
-	}
-	return fOK;
-}
-
-/// <summary>
-/// Wait confirmation from the ELC the order has been received
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="pdwError">Error if any (from GetLastError)</param>
-/// <param name="dwTimeout">Timer to wait the command reply for</param>
-/// <returns></returns>
-static bool EndRequest(ELC pelc, LPDWORD pdwError, DWORD dwTimeout)
-{
-	MYPELCSTRUCT;
-	bool fOK;
-	char b = 0x00;
-	// wait ENQ
-	LOG(pelc, "END SENDING", true);
-	if (fOK = GetACK(pelc, &b, pdwError, dwTimeout))
-	{
-		// send ACK
-		fOK = SendEOT(pelc, pdwError);
-	}
-	else
-	{
-		// got inappropriate response
-		SendEOT(pelc, pdwError);
-	}
-	return fOK;
-}
-
-/// <summary>
-/// Warn the ELC we're going to send him data
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="pdwError">Error if any (from GetLastError)</param>
-/// <param name="dwTimeout">Timer to wait the command for</param>
-/// <returns></returns>
-static bool StartSending(ELC pelc, LPDWORD pdwError, DWORD dwTimeout)
-{
-	MYPELCSTRUCT;
-	bool fOK;
-	char buffer[2] = { ENQ, 0 };
-	// send ENQ
-	LOG(pelc, "START SENDING", true);
-	if (fOK = SendENQ(pelc, pdwError))
-	{
-		char b = 0x00;
-		// wait ACK
-		if (!(fOK = GetACK(pelc, &b, pdwError, dwTimeout)))
-		{
-			SendEOT(pelc, pdwError);
-			PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
-		}
-	}
-	return fOK;
-}
-
-/// <summary>
 /// Process in case of timeout while waiting to receive a command.
 /// Return value indicates whether waiting for the command must carry on (true) or not (false)
 /// </summary>
 /// <param name="pelc"></param>
 /// <param name="pError"></param>
 /// <returns></returns>
-static bool InCaseOfTimeout(ELC pelc, LPDWORD pdwError)
+static BOOL InCaseOfTimeout(ELC pelc, LPDWORD pdwError)
 {
 	MYPELCSTRUCT;
-	bool fContinue = ISTIMEOUT(*pdwError);// && CANCONTINUESESSION;
+	BOOL fContinue = ISTIMEOUT(*pdwError);// && CANCONTINUESESSION;
 	SendEOT(pelc, pdwError);
 	if (!fContinue)
 		PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
@@ -1328,13 +1244,14 @@ static bool InCaseOfTimeout(ELC pelc, LPDWORD pdwError)
 
 #pragma region dialog
 
-static bool Read1Char(ELC pelc, char * pchBuffer, LPDWORD pdwError, DWORD dwTimeout, const char * psz)
+static BOOL Read1Char(ELC pelc, char* pchBuffer, LPDWORD pdwError, DWORD dwTimeout, const char* psz)
 {
 	DWORD dwReceived;
-	bool fOK;
+	BOOL fOK;
 	char c = 0x00;
+	BOOL fTimeout;
 	//if (fOK = ReadData(pelc, &c, 1, &dwReceived, pdwError, dwTimeout))
-	if (fOK = GetReply(pelc, &c, 1, &dwReceived, pdwError, dwTimeout, psz))
+	if (fOK = GetReply(pelc, &c, 1, &dwReceived, pdwError, dwTimeout, &fTimeout, psz))
 	{
 		if (NULL != pchBuffer)
 			*pchBuffer = c;
@@ -1342,9 +1259,9 @@ static bool Read1Char(ELC pelc, char * pchBuffer, LPDWORD pdwError, DWORD dwTime
 	return (fOK && 0 != dwReceived);
 }
 
-static bool ReadUntil(ELC pelc, char toReach, char * pchBuffer, const DWORD dwSize, LPDWORD pdwReceived, LPDWORD pdwError, DWORD dwTimeout, const char * psz)
+static BOOL ReadUntil(ELC pelc, char toReach, char* pchBuffer, const DWORD dwSize, LPDWORD pdwReceived, LPDWORD pdwError, DWORD dwTimeout, const char* psz)
 {
-	bool fOK;
+	BOOL fOK;
 	char c;
 	DWORD counter = 0;
 	if (NULL != pdwReceived)
@@ -1359,8 +1276,7 @@ static bool ReadUntil(ELC pelc, char toReach, char * pchBuffer, const DWORD dwSi
 			if (NULL != pdwReceived)
 				(*pdwReceived)++;
 		}
-	}
-	while (fOK && toReach != c);
+	} while (fOK && toReach != c);
 	return fOK;
 }
 
@@ -1373,130 +1289,150 @@ static bool ReadUntil(ELC pelc, char toReach, char * pchBuffer, const DWORD dwSi
 /// <param name="psz"></param>
 /// <param name="dwTimeout">Timer to wait for</param>
 /// <returns></returns>
-static bool ReceiveReply(ELC pelc, DWORD dwTimeout)
+static BOOL ReceiveReply(ELC pelc, DWORD dwTimeout)
 {
-	PELCSTRUCT pelcstruct = (PELCSTRUCT)pelc;
-	//MYPELCSTRUCT;
+	MYPELCSTRUCT;
 
-	bool fOK, fContinue = true;
+	BOOL fOK;
 	DWORD dwReceived, dwError;
-	char * mypsz = MYPFNC->pFnc;
+	const char* pdummy;
+	char dummy[ONEKB];
 
-	// wait request to send from ELC
-	if (fOK = StartReply(pelc, &dwError, dwTimeout))
+	// prepare buffers
+	DWORD dwReplyExSize = strlen(MYPFNC->pReplyEx);
+	DWORD dwReplyBufferSize = ONEKB; // sizeof(REPLYHEADER) + sizeof(REPLYCR) + dwReplyExSize + dwExpectedDataSize + sizeof(REPLYTRAILER) + 1; // +1 for safety
+	char* pReplyBuffer = (char*)CALLOC(dwReplyBufferSize);
+	char* pReplyBufferTmp = (char*)CALLOC(dwReplyBufferSize);
+	char chAfterReply = 0x00;
+	DWORD dwReceivedReplyBufferSize = 0;
+	BOOL fSTX = false, fETX = false, fLRC = false;
+	char* pbETX = NULL;
+
+	// reset sessions
+	MYPELC->N1 = 0;
+	MYPELC->N2 = 0;
+
+	// wait reply from ELC
+	BOOL fContinue = true;
+	while (fContinue)
 	{
-		// reply buffer sizes
-		DWORD dwReplyExSize = strlen(MYPFNC->pReplyEx);
-		DWORD dwReplyBufferSize = ONEKB;// sizeof(REPLYHEADER) + sizeof(REPLYCR) + dwReplyExSize + dwExpectedDataSize + sizeof(REPLYTRAILER) + 1; // +1 for safety
-		char * pReplyBuffer = (char *)CALLOC(dwReplyBufferSize);
-		char * pReplyBufferTmp = (char *)CALLOC(dwReplyBufferSize);
-		char chAfterReply = 0x00;
-		DWORD dwReceivedReplyBufferSize = 0;
-		//DWORD offset = 0;
-		bool fSTX = false, fETX = false, fLRC = false;
-		char * pbETX = NULL;
-		//SetCommunicationState(pelc, false, ETX);
-		// read until STX
-		if (fOK = ReadUntil(pelc, STX, NULL, 0, NULL, &dwError, dwTimeout, mypsz))
-		{
-			mypsz = NULL;
-			pReplyBuffer[0] = STX;
-			dwReceivedReplyBufferSize = 1;
-			// read until STX
-			if (fOK = ReadUntil(pelc, ETX, pReplyBuffer + dwReceivedReplyBufferSize, dwReplyBufferSize - dwReceivedReplyBufferSize, &dwReceived, &dwError, dwTimeout, mypsz))
-			{
-				dwReceivedReplyBufferSize += dwReceived;
-				pbETX = pReplyBuffer + dwReceivedReplyBufferSize - 1;
-				// read LRC
-				if (fOK = (dwReplyBufferSize > dwReceivedReplyBufferSize && Read1Char(pelc, pReplyBuffer + dwReceivedReplyBufferSize, &dwError, dwTimeout, mypsz)))
-				{
-					mypsz = (char *)"TRASHING";
-					// determine exact command size
-					DWORD dwExactReplySize = pbETX - pReplyBuffer + 2; // 2 for LRC + ETX position
-					DWORD dwReceivedReplyExDataSize = dwExactReplySize - sizeof(REPLYHEADER) - sizeof(REPLYCR) - sizeof(REPLYTRAILER);
-					DWORD dwReceivedReplyDataSize = dwReceivedReplyExDataSize - dwReplyExSize;
-					PREPLYHEADER pReplyHeader = (PREPLYHEADER)pReplyBuffer;
-					PREPLYCR pReplyCR = (PREPLYCR)(pReplyBuffer + sizeof(REPLYHEADER));
-					char * pReplyEx = (char *)pReplyCR + sizeof(REPLYCR);
-					char * pReplyData = pReplyEx + dwReplyExSize;
-					PREPLYTRAILER pReplyTrailer = (PREPLYTRAILER)(pReplyData + dwReceivedReplyDataSize);
-					//PELCSTRUCT ps = MYPELCEX(pelc);
-					// test received format
-					if (fOK = (0 == memcmp(&pReplyHeader->cmd, MYPFNC->pReply, sizeof(ELCCMD))
-						 && (0 == memcmp(pReplyEx, MYPFNC->pReplyEx, dwReplyExSize))
-						 && (ETX == pReplyTrailer->etx.etx)))
-					{
-						// test LRC
-						if (fOK = LRC(pelc, pReplyHeader->cmd.cmd, dwExactReplySize - sizeof(ELCSTX) - sizeof(REPLYTRAILER) + sizeof(ELCETX)) == pReplyTrailer->lrc.lrc)
-						{
-							LOG(pelc, " IS VALID", false);
-							// save data
-							memcpy_s(&MYPFNC->CR, sizeof(REPLYCR), pReplyCR, sizeof(REPLYCR));
-							if (0 != dwReceivedReplyDataSize)
-							{
-								if (NULL != (MYPFNC->pReplyData = CALLOC(dwReceivedReplyDataSize + 1)))
-								{
-									memcpy_s(MYPFNC->pReplyData, dwReceivedReplyDataSize, pReplyData, dwReceivedReplyDataSize);
-								}
-							}
-							MYPFNC->dwReplyDataSize = dwReceivedReplyDataSize;
-						}
-						else
-						{
-							LOG(pelc, " IS INVALID", false);
-						}
-						// read additonal output if necessary
-						bool keepCarryOn = true;
-						while (keepCarryOn && Read1Char(pelc, &chAfterReply, &dwError, dwTimeout, mypsz))
-						{
-							mypsz = NULL;
-							char c;
-							// if there's another STX let's read the full command
-							if (STX == chAfterReply)
-							{
+		BOOL fTimeout;
 
-								if (ReadUntil(pelc, ETX, NULL, 0, NULL, &dwError, dwTimeout, mypsz))
+		// initiate communication
+		if (0 == MYPELC->N2)
+			pdummy = "START RECEIVING %s";
+		else
+			pdummy = "RESTART RECEIVING %s";
+		//sprintf_s(dummy, sizeof(dummy), pdummy, MYPFNC->pFnc);
+		sprintf_s(dummy, pdummy, MYPFNC->pFnc);
+		LOG(dummy, true);
+
+		char b = 0x00;
+		if (fOK = WaitENQ(pelc, &b, &dwError, &fTimeout))
+		{
+			MYPELC->N2++;
+			MYPELC->N1++;
+			// send ACK
+			if (fOK = SendACK(pelc, &dwError))
+			{
+				BOOL fReceive = true;
+				while (fReceive && fContinue)
+				{
+					if (fOK = WaitSTX(pelc, &(b = 0x00), &dwError, &fTimeout))
+					{
+						pReplyBuffer[0] = STX;
+						dwReceivedReplyBufferSize = 1;
+						// read until STX
+						if (fOK = ReadUntil(pelc, ETX, pReplyBuffer + dwReceivedReplyBufferSize, dwReplyBufferSize - dwReceivedReplyBufferSize, &dwReceived, &dwError, MYPELC->TD, NULL))
+						{
+							dwReceivedReplyBufferSize += dwReceived;
+							pbETX = pReplyBuffer + dwReceivedReplyBufferSize - 1;
+							// read LRC
+							if (fOK = (dwReplyBufferSize > dwReceivedReplyBufferSize && Read1Char(pelc, pReplyBuffer + dwReceivedReplyBufferSize, &dwError, dwTimeout, NULL)))
+							{
+								// determine exact command size
+								DWORD dwExactReplySize = pbETX - pReplyBuffer + 2; // 2 for LRC + ETX position
+								DWORD dwReceivedReplyExDataSize = dwExactReplySize - sizeof(REPLYHEADER) - sizeof(REPLYCR) - sizeof(REPLYTRAILER);
+								DWORD dwReceivedReplyDataSize = dwReceivedReplyExDataSize - dwReplyExSize;
+								PREPLYHEADER pReplyHeader = (PREPLYHEADER)pReplyBuffer;
+								PREPLYCR pReplyCR = (PREPLYCR)(pReplyBuffer + sizeof(REPLYHEADER));
+								char* pReplyEx = (char*)pReplyCR + sizeof(REPLYCR);
+								char* pReplyData = pReplyEx + dwReplyExSize;
+								PREPLYTRAILER pReplyTrailer = (PREPLYTRAILER)(pReplyData + dwReceivedReplyDataSize);
+								// test LRC
+								if (fOK = LRC(pelc, pReplyHeader->cmd.cmd, dwExactReplySize - sizeof(ELCSTX) - sizeof(REPLYTRAILER) + sizeof(ELCETX)) == pReplyTrailer->lrc.lrc)
 								{
-									// read LRC
-									if (Read1Char(pelc, &c, &dwError, dwTimeout, mypsz))
-										// arrived here the full command has been read
-										;
+									LOG(" IS VALID", false);
+									if (SendACK(pelc, &dwError))
+									{
+										WaitEOT(pelc, &(b = 0x00), &dwError, &fTimeout);
+									}
+									// test received format
+									if (fOK = (sizeof(ELCCMD) == strlen(MYPFNC->pReply) && 0 == memcmp(&pReplyHeader->cmd, MYPFNC->pReply, sizeof(ELCCMD))
+										&& (dwReplyExSize == strlen(MYPFNC->pReplyEx) && 0 == memcmp(pReplyEx, MYPFNC->pReplyEx, dwReplyExSize))
+										&& (ETX == pReplyTrailer->etx.etx)))
+									{
+										// eventually save data
+										memcpy_s(&MYPFNC->CR, sizeof(REPLYCR), pReplyCR, sizeof(REPLYCR));
+										if (0 != dwReceivedReplyDataSize)
+										{
+											if (NULL != (MYPFNC->pReplyData = CALLOC(dwReceivedReplyDataSize + 1)))
+											{
+												memcpy_s(MYPFNC->pReplyData, dwReceivedReplyDataSize, pReplyData, dwReceivedReplyDataSize);
+											}
+										}
+										MYPFNC->dwReplyDataSize = dwReceivedReplyDataSize;
+										LOG("COMPLETED SCCESSFULLY", true);
+									}
+									fContinue = false;
+								}
+								else
+								{
+									LOG(" IS INVALID", false);
 								}
 							}
-							// not a STX, test the character but it could be the next character in the protocol
-							else if (0x00 != chAfterReply)
-							{
-								// it is we must carry on with the protocol itself
-								keepCarryOn = false;
-							}
-							else
-							{
-								// THIS SHOULD NEVER HAPPEN - null character, let's carry on reading
-								//keepCarryOn = false;
-							}
 						}
+					}
+					if (fOK)
+					{
 					}
 					else
 					{
-						// invalid format
+						MYPELC->N1++;
+						fOK = SendNAK(pelc, &dwError);
+						if (NB_ATTEMPTS > MYPELC->N1)
+						{
+							// wait STX again
+						}
+						else
+						{
+							if (NB_ATTEMPTS > MYPELC->N2)
+							{
+								// return waiting for the answer
+								MYPELC->N1 = 0;
+								fReceive = false;
+							}
+							else
+							{
+								// failed to receive the answer
+								fContinue = false;
+							}
+
+						}
 					}
-				}
-				else
-				{
-					// invalid buffer size
 				}
 			}
 			else
 			{
-				// read has failed
+				// error sending ACK, what to do ?
+				fContinue = false;
 			}
 		}
-		// terminate dialog
-		EndReply(pelc, chAfterReply, fOK, &dwError, MYPELC->timerTerminateReply);
-	}
-	else
-	{
-		// error initialising reception
+		else
+		{
+			// failed to receive ENQ, stop receiving
+			fContinue = false;
+		}
 	}
 	return fOK;
 }
@@ -1522,11 +1458,14 @@ DWORD WINAPI ThreadAsyncProcessing(_In_ LPVOID lpParameter)
 
 	// ready to start
 	SetEvent(pthr->started);
+	// start caller's timer
+	if (NULL != MYPELC->startTimer)
+		SetEvent(MYPELC->startTimer);
 	// start receiving the reply
 	if (ReceiveReply(pthr->pelc, INFINITE))
-		SetEvent(MYPELC->eventCompleted);
+		SetEvent(MYPELC->completed);
 	else
-		SetEvent(MYPELC->eventError);
+		SetEvent(MYPELC->error);
 	CloseHandle(pthr->started);
 	free(pthr);
 	return dw;
@@ -1536,15 +1475,14 @@ DWORD WINAPI ThreadAsyncProcessing(_In_ LPVOID lpParameter)
 /// Start the thread that will process the async operation
 /// </summary>
 /// <param name="pelc"></param>
-/// <param name="psz"></param>
-/// <param name="action"></param>
+/// <param name="asyncOperationEndedEvent">An asyncOperationEndedEvent which will be signaled when the operation if finished</param>
 /// <returns></returns>
-static bool StartAsyncProcessingThread(ELC pelc)
+static BOOL StartAsyncProcessingThread(ELC pelc)
 {
 	MYPELCSTRUCT;
 	PTHREADASYNCPROCESSING pthr = (PTHREADASYNCPROCESSING)CALLOC(sizeof(THREADASYNCPROCESSING));
 	pthr->pelc = pelc;
-	pthr->started = CreateEvent(NULL, true, false, NULL);
+	pthr->started = CreateEvent(NULL, false, false, NULL);
 	// start thread
 	HANDLE h = CreateThread(NULL, ONEKB * 50, ThreadAsyncProcessing, pthr, 0, NULL);
 	if (NULL != pthr->started)
@@ -1558,59 +1496,129 @@ static bool StartAsyncProcessingThread(ELC pelc)
 /// <param name="pelc"></param>
 /// <param name="psz">A string describing the operation is progress</param>
 /// <returns></returns>
-static bool SendOrder(ELC pelc)
+static BOOL SendOrder(ELC pelc)
 {
 	MYPELCSTRUCT;
-	bool fOK, fContinue = true;
+	BOOL fOK, fTimeout;
+	const char* pdummy;
+	char dummy[ONEKB];
 	DWORD dwError;
 
 	// purge COM port
 	PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 
-	// warn the ELC we want to send data
-	if (fOK = StartSending(pelc, &dwError, MYPELC->timerInitiateRequest))
+	// prepare the buffer to send
+	DWORD dwRequestExSize = strlen(MYPFNC->pRequestEx);
+	DWORD dwRequestDataSize = strlen(MYPFNC->pRequestData);
+	DWORD dwRequestExDataSize = dwRequestExSize + dwRequestDataSize;
+	DWORD dwRequestBufferSize = sizeof(REQUESTHEADER) + dwRequestExDataSize + sizeof(REQUESTTRAILER);
+	char* pRequestBuffer = (char*)CALLOC(dwRequestBufferSize);
+	PREQUESTHEADER pRequestHeader = (PREQUESTHEADER)pRequestBuffer;
+	PREQUESTTRAILER pRequestTrailer = (PREQUESTTRAILER)(pRequestBuffer + sizeof(REQUESTHEADER) + dwRequestExDataSize);
+	char* pRequestEx = pRequestBuffer + sizeof(REQUESTHEADER);
+	char* pRequestData = pRequestBuffer + sizeof(REQUESTHEADER) + dwRequestExSize;
+	// prepare request buffer
+	pRequestHeader->stx.stx = STX;
+	memcpy_s(pRequestHeader->cmd.cmd, COMMAND_SIZE, MYPFNC->pRequest, COMMAND_SIZE);
+	if (0 != dwRequestExSize)
+		memcpy_s(pRequestEx, dwRequestExSize, MYPFNC->pRequestEx, dwRequestExSize);
+	if (0 != dwRequestDataSize)
+		memcpy_s(pRequestData, dwRequestDataSize, MYPFNC->pRequestData, dwRequestDataSize);
+	pRequestTrailer->etx.etx = ETX;
+	pRequestTrailer->lrc.lrc = LRC(pelc, pRequestHeader->cmd.cmd, dwRequestBufferSize - sizeof(ELCSTX) - sizeof(REQUESTTRAILER) + sizeof(ELCETX));
+
+	// reset sessions
+	MYPELC->N1 = 0;
+	MYPELC->N2 = 0;
+
+	// trying to exchange
+	BOOL fContinue = true;
+	while (fContinue)
 	{
-		// request buffer sizes
-		int dwRequestExSize = strlen(MYPFNC->pRequestEx);
-		int dwRequestDataSize = strlen(MYPFNC->pRequestData);
-		int dwRequestExDataSize = dwRequestExSize + dwRequestDataSize;
-		int dwRequestBufferSize = sizeof(REQUESTHEADER) + dwRequestExDataSize + sizeof(REQUESTTRAILER);
-		char * pRequestBuffer = (char *)CALLOC(dwRequestBufferSize);
-		PREQUESTHEADER pRequestHeader = (PREQUESTHEADER)pRequestBuffer;
-		PREQUESTTRAILER pRequestTrailer = (PREQUESTTRAILER)(pRequestBuffer + sizeof(REQUESTHEADER) + dwRequestExDataSize);
-		char * pRequestEx = pRequestBuffer + sizeof(REQUESTHEADER);
-		char * pRequestData = pRequestBuffer + sizeof(REQUESTHEADER) + dwRequestExDataSize;
-		// prepare request buffer
-		pRequestHeader->stx.stx = STX;
-		memcpy_s(pRequestHeader->cmd.cmd, COMMAND_SIZE, MYPFNC->pRequest, COMMAND_SIZE);
-		if (0 != dwRequestExSize)
-			memcpy_s(pRequestEx, dwRequestExSize, MYPFNC->pRequestData, dwRequestExSize);
-		if (0 != dwRequestDataSize)
-			memcpy_s(pRequestData, dwRequestDataSize, MYPFNC->pRequestData, dwRequestDataSize);
-		pRequestTrailer->etx.etx = ETX;
-		pRequestTrailer->lrc.lrc = LRC(pelc, pRequestHeader->cmd.cmd, dwRequestBufferSize - sizeof(ELCSTX) - sizeof(REQUESTTRAILER) + sizeof(ELCETX));
-		// send order to the ELC
-		int dwWritten;
-		if (fOK = SendRequest(pelc, pRequestBuffer, dwRequestBufferSize, &dwWritten, &dwError, MYPELC->timerSendOrder, MYPFNC->pFnc))
+		// initiate communication
+		if (0 == MYPELC->N2)
+			pdummy = "START SENDING %s";
+		else
+			pdummy = "RESTART SENDING %s";
+		//sprintf_s(dummy, sizeof(dummy), pdummy, MYPFNC->pFnc);
+		sprintf_s(dummy, pdummy, MYPFNC->pFnc);
+		LOG(dummy, true);
+
+		BOOL fStart = true;
+		while (fStart && fContinue)
 		{
-			// wait ELC's confirmation the order has been received and processed
-			if (fOK = EndRequest(pelc, &dwError, MYPELC->timerTerminateRequest))
+			// initiating exchange
+			MYPELC->N2++;
+			if (fOK = SendENQ(pelc, &dwError))
 			{
-				// arrived here everything went right
+				char b = 0x00;
+				if (fOK = WaitACK(pelc, &b, &dwError, &fTimeout))
+				{
+					// send order
+
+				// send order to the ELC
+					int dwWritten;
+
+					BOOL fSendOrder = true;
+					while (fSendOrder && fContinue)
+					{
+						MYPELC->N1++;
+						if (fOK = SendRequest(pelc, pRequestBuffer, dwRequestBufferSize, &dwWritten, &dwError, MYPFNC->pFnc))
+						{
+							BOOL fTimeout;
+							char b = 0x00;
+							if (fOK = WaitACK(pelc, &b, &dwError, &fTimeout))
+							{
+								// everything went right
+								SendEOT(pelc, &dwError);
+								fContinue = false;
+							}
+							else
+							{
+								if (NB_ATTEMPTS > MYPELC->N1)
+								{
+									// retry sending the order
+								}
+								else
+								{
+									fOK = SendEOT(pelc, &dwError);
+									if (NB_ATTEMPTS > MYPELC->N2)
+									{
+										SLEEPT2;
+										// return to initiating conversation
+										fSendOrder = false;
+									}
+									else
+									{
+										// terminate communication
+										fContinue = false;
+									}
+								}
+							}
+						}
+					}
+				}
+				else
+				{
+					SendEOT(pelc, &dwError);
+					if (fStart = (NB_ATTEMPTS > MYPELC->N2))
+					{
+						SLEEPT2;
+					}
+					else
+					{
+						// stop processing the order
+						fContinue = false;
+					}
+				}
 			}
 			else
 			{
-				// error finishing sending process
+				//error sending ENQ
+				fContinue = false;
 			}
 		}
-		FREE(&pRequestBuffer);
 	}
-	else
-	{
-		// error initialising communication
-	}
-	if (!fOK)
-		PurgeComm(MYPELC->handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 	return fOK;
 }
 
@@ -1640,22 +1648,20 @@ DRIVERAPI ELC __stdcall ELCInit()
 	PELCSTRUCT pelcstruct;
 	if (NULL != (pelcstruct = (PELCSTRUCT)CALLOC(sizeof(ELCSTRUCT))))
 	{
+		ELC pelc = pelcstruct;
 		pelcstruct->handle = NO_FILE;
-		pelcstruct->port = NO_DRIVER;
+		pelcstruct->port = NO_COM_PORT;
 		pelcstruct->BaudRate = CBR_9600;
 		pelcstruct->logHandle = NO_FILE;
+		LOGONLY("reset mutex");
 		pelcstruct->mutexStopReading = NULL;
-		pelcstruct->timerInitiateRequest = 2 * ONESECOND;
-		pelcstruct->timerTerminateRequest = 2 * ONESECOND;
-		pelcstruct->timerInitiateReply = 2 * ONESECOND;
-		pelcstruct->timerTerminateReply = 2 * ONESECOND;
-		pelcstruct->timerSendOrder = 2 * ONESECOND;
-		pelcstruct->T0 = TT0;
 		pelcstruct->T1 = TT1;
 		pelcstruct->T2 = TT2;
+		pelcstruct->TA = TTA;
 		pelcstruct->TR = TTR;
 		pelcstruct->TRA = TTRA;
 		pelcstruct->TD = TTD;
+		pelcstruct->timerBeforeAbort = 50;
 	}
 	return pelcstruct;
 }
@@ -1664,10 +1670,10 @@ DRIVERAPI ELC __stdcall ELCInit()
 /// Release resources
 /// </summary>
 /// <param name="pelc"></param>
-DRIVERAPI void __stdcall ELCRelease(ELC * ppelc)
+DRIVERAPI void __stdcall ELCRelease(ELC* ppelc)
 {
 	ELCClose(*ppelc);
-	FREE((char **)ppelc);
+	FREE((char**)ppelc);
 }
 
 /// <summary>
@@ -1677,10 +1683,10 @@ DRIVERAPI void __stdcall ELCRelease(ELC * ppelc)
 /// <param name="pelc"></param>
 /// <param name="port">the port to use. It should be greater or equal to 0</param>
 /// <returns></returns>
-DRIVERAPI bool __stdcall ELCSetPort(ELC pelc, int port)
+DRIVERAPI BOOL __stdcall ELCSetPort(ELC pelc, int port)
 {
 	MYPELCSTRUCT;
-	if (NULL != pelc && NO_DRIVER < port)
+	if (NULL != pelc && NO_COM_PORT < port)
 	{
 		ELCClose(pelc);
 		MYPELC->port = port;
@@ -1694,52 +1700,51 @@ DRIVERAPI bool __stdcall ELCSetPort(ELC pelc, int port)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI bool __stdcall ELCOpen(ELC pelc)
+DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc)
 {
 	MYPELCSTRUCT;
-	bool result = true;
+	BOOL result = true;
 	char dummy[ONEKB];
 
 	// open the requested port
-	if (NO_DRIVER == MYPELC->port)
-		// get COM port used by the ELC
-		MYPELC->port = GetComPort();
-	if (NO_DRIVER != MYPELC->port)
-		sprintf_s(dummy, "\\\\.\\COM%d", MYPELC->port);
+	//if (NO_COM_PORT == MYPELC->port)
+	//	// get COM port used by the ELC
+	//	MYPELC->port = GetComPort();
+	if (NO_COM_PORT != MYPELC->port)
+	{
+		//sprintf_s(dummy, sizeof(dummy), "\\\\.\\COM%u", MYPELC->port);
+		sprintf_s(dummy, "\\\\.\\COM%u", MYPELC->port);
+	}
 	else
+	{
 		return false;
+	}
 
 	// open the COM port
 	MYPELC->handle = CreateFile((LPCSTR)dummy,
-										 GENERIC_READ | GENERIC_WRITE,
-										 0,
-										 0,
-										 OPEN_EXISTING,
-
-#ifdef DOOVERLAPPING
-
-										 FILE_FLAG_OVERLAPPED,
-
-#else
-
-										 FILE_ATTRIBUTE_NORMAL,
-
-#endif // DOOVERLAPPING
-
-										 NULL);
+		GENERIC_READ | GENERIC_WRITE,
+		0,
+		0,
+		OPEN_EXISTING,
+		FILE_FLAG_OVERLAPPED,
+		NULL);
 	MYPELC->mutexStopReading = CreateMutex(NULL, false, NULL);
-	if (result = (INVALID_HANDLE_VALUE != MYPELC->handle && NULL != MYPELC->mutexStopReading && SetCommunicationState(pelc, true, 0x00)))
+	MYPELC->eventInProgress = CreateMutex(NULL, false, NULL);
+	if (result = (INVALID_HANDLE_VALUE != MYPELC->handle &&
+		NULL != MYPELC->mutexStopReading &&
+		NULL != MYPELC->eventInProgress &&
+		SetCommunicationState(pelc, true, 0x00)))
 	{
 		// open log file
-		char * pszLogFileName = (char *)CALLOC(ONEKB);
-		sprintf_s(pszLogFileName, ONEKB, "ELC on COM%d.log", MYPELC->port);
+		char* pszLogFileName = (char*)CALLOC(ONEKB);
+		sprintf_s(pszLogFileName, ONEKB, "ELC on COM%u.log", MYPELC->port);
 		MYPELC->logHandle = CreateFile((LPCSTR)pszLogFileName,
-												 FILE_GENERIC_WRITE,
-												 FILE_SHARE_READ,
-												 NULL,
-												 OPEN_ALWAYS,
-												 FILE_ATTRIBUTE_NORMAL,
-												 NULL);
+			FILE_GENERIC_WRITE,
+			FILE_SHARE_READ,
+			NULL,
+			OPEN_ALWAYS,
+			FILE_ATTRIBUTE_NORMAL,
+			NULL);
 		free(pszLogFileName);
 		LOGCRLF;
 	}
@@ -1761,7 +1766,7 @@ DRIVERAPI int __stdcall ELCPort(ELC pelc)
 	if (NULL != pelc && IsOpen(pelc))
 		return MYPELC->port;
 	else
-		return NO_DRIVER;
+		return NO_COM_PORT;
 }
 
 /// <summary>
@@ -1774,7 +1779,6 @@ DRIVERAPI void __stdcall ELCClose(ELC pelc)
 	MYPELCSTRUCT;
 	if (IsOpen(pelc))
 	{
-		// release all <<<>>>
 		SetCommState(MYPELC->handle, &MYPELC->dcbInitial);
 		SLEEPAFTERSETCOMMSTATE;
 		if (NO_FILE != MYPELC->logHandle)
@@ -1783,9 +1787,13 @@ DRIVERAPI void __stdcall ELCClose(ELC pelc)
 		if (NO_FILE != MYPELC->handle)
 			CloseMyHandle(MYPELC->handle);
 		MYPELC->handle = NO_FILE;
+		LOGONLY("close mutex");
 		if (NULL != MYPELC->mutexStopReading)
 			CloseHandle(MYPELC->mutexStopReading);
 		MYPELC->mutexStopReading = NULL;
+		if (NULL != MYPELC->eventInProgress)
+			CloseHandle(MYPELC->eventInProgress);
+		MYPELC->eventInProgress = NULL;
 	}
 }
 
@@ -1793,25 +1801,26 @@ DRIVERAPI void __stdcall ELCClose(ELC pelc)
 /// Get teh status of the ELC
 /// </summary>
 /// <param name="pelc"></param>
-/// <param name="pfDocumentIsPresent">true if a check note was still inside the ELC, false otherwise</param>
+/// <param name="pfDocumentReadyToBeRead">true if a check note is ready to enter the reader, false otherwise (it doesn't say whether a check is inside the reader)</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCStatus(ELC pelc, bool * pfDocumentIsPresent)
+DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
 {
 	MYPELCSTRUCT;
-	bool fOK = false;
-	*pfDocumentIsPresent = false;
+	BOOL fOK = false;
+	*pfDocumentReadyToBeRead = false;
 
-	char * REQUEST = STATUS_REQUEST;
-	char * REQUEST_EX = STATUS_REQUEST_EX;
-	char * REQUEST_DATA = STATUS_REQUEST_DATA;
+	char* REQUEST = STATUS_REQUEST;
+	char* REQUEST_EX = STATUS_REQUEST_EX;
+	char* REQUEST_DATA = STATUS_REQUEST_DATA;
 
-	char * REPLY = STATUS_REPLY;
-	char * REPLY_CR = STATUS_REPLY_CR;
-	char * REPLY_EX = STATUS_REPLY_EX;
+	char* REPLY = STATUS_REPLY;
+	char* REPLY_CR = STATUS_REPLY_CR;
+	char* REPLY_EX = STATUS_REPLY_EX;
 
-	MYPELC->status.pFnc = (char *)"STATUS";
+	MYPELC->status.pFnc = STATUS_FNC;
 	MYFNC(MYPELC->status);
 	SETREQUESTANDREPLY;
+	LOGDATETIME(MYPELC->pCurrentFnc->pFnc);
 
 #define STATUS_CR1_OK					0x31
 #define STATUS_CR1_KO					0x34
@@ -1823,11 +1832,11 @@ DRIVERAPI bool __stdcall ELCStatus(ELC pelc, bool * pfDocumentIsPresent)
 	{
 		if (fOK = SendOrder(pelc))
 		{
-			if (fOK = ReceiveReply(pelc, MYPELC->timerInitiateReply))
+			if (fOK = ReceiveReply(pelc, INFINITE))
 			{
 				SaveCR(pelc);
 				if (fOK = (STATUS_CR1_OK == CR1))
-					*pfDocumentIsPresent = STATUS_CR3_DOCUMENT == CR3;
+					*pfDocumentReadyToBeRead = STATUS_CR3_DOCUMENT == CR3;
 			}
 		}
 		ForbidReading(pelc);
@@ -1841,23 +1850,24 @@ DRIVERAPI bool __stdcall ELCStatus(ELC pelc, bool * pfDocumentIsPresent)
 /// <param name="pelc"></param>
 /// <param name="pfDocumentEjected">OUT, true if the document has been ejected or no document was inside, false otherwise</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCAbort(ELC pelc, bool * pfDocumentEjected)
+DRIVERAPI BOOL __stdcall ELCAbort(ELC pelc, BOOL* pfDocumentEjected)
 {
 	MYPELCSTRUCT;
-	bool fOK = true;
+	BOOL fOK = true;
 	*pfDocumentEjected = false;
 
-	char * REQUEST = ABORT_REQUEST;
-	char * REQUEST_EX = ABORT_REQUEST_EX;
-	char * REQUEST_DATA = ABORT_REQUEST_DATA;
+	char* REQUEST = ABORT_REQUEST;
+	char* REQUEST_EX = ABORT_REQUEST_EX;
+	char* REQUEST_DATA = ABORT_REQUEST_DATA;
 
-	char * REPLY = ABORT_REPLY;
-	char * REPLY_CR = ABORT_REPLY_CR;
-	char * REPLY_EX = ABORT_REPLY_EX;
+	char* REPLY = ABORT_REPLY;
+	char* REPLY_CR = ABORT_REPLY_CR;
+	char* REPLY_EX = ABORT_REPLY_EX;
 
-	MYPELC->abort.pFnc = (char *)"ABORT";
+	MYPELC->abort.pFnc = ABORT_FNC;
 	MYFNC(MYPELC->abort);
 	SETREQUESTANDREPLY;
+	LOGDATETIME(MYPELC->pCurrentFnc->pFnc);
 
 #define ABORT_CR1_OK					0x31
 #define ABORT_CR1_KO					0x34
@@ -1868,7 +1878,7 @@ DRIVERAPI bool __stdcall ELCAbort(ELC pelc, bool * pfDocumentEjected)
 	{
 		if (fOK = SendOrder(pelc))
 		{
-			if (fOK = ReceiveReply(pelc, MYPELC->timerInitiateReply))
+			if (fOK = ReceiveReply(pelc, WRITE_COMMAND_TIMER))
 			{
 				SaveCR(pelc);
 				if (fOK = (ABORT_CR1_OK == CR1))
@@ -1887,14 +1897,16 @@ DRIVERAPI bool __stdcall ELCAbort(ELC pelc, bool * pfDocumentEjected)
 /// <param name="pfnc"></param>
 /// <param name="psz">The operation to start</param>
 /// <param name="iTimer">Timer to wait for completion</param>
-/// <returns></returns>
-static bool StartAsync(ELC pelc, int iTimer)
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
+/// <returnsTrue if successfull, false otherwise</returns>
+static BOOL StartAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
-	bool fOK;
+	BOOL fOK;
 
 	// initialise sync environment
-	PrepareAsyncEnvironment(pelc);
+	PrepareAsyncEnvironment(pelc, startTimerEvent, asyncOperationEndedEvent);
 
 	if (fOK = AllowReading(pelc))
 	{
@@ -1912,13 +1924,13 @@ static bool StartAsync(ELC pelc, int iTimer)
 				else
 				{
 					// stop result thread
-					SetEvent(MYPELC->eventError);
+					SetEvent(MYPELC->error);
 				}
 			}
 			else
 			{
 				// stop result thread
-				SetEvent(MYPELC->eventError);
+				SetEvent(MYPELC->error);
 			}
 		}
 
@@ -1938,54 +1950,57 @@ static bool StartAsync(ELC pelc, int iTimer)
 /// </summary>
 /// <param name="pelc"></param>
 /// <param name="iTimer">Timer to wait for</param>
+/// <param name="pfTimeout"></param>
+/// <param name="pfCancelled"></param>
 /// <returns><see </returns>
-DRIVERAPI EventResult __stdcall ELCWaitAsync(ELC pelc, int iTimer)
+DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer, BOOL* pfTimeout, BOOL* pfCancelled)
 {
+	*pfTimeout = *pfCancelled = false;
 	MYPELCSTRUCT;
 	if (IsInProgress(pelc, false))
-		return EventResult::eventError;
-
-	MYFNC(MYPELC->read);
-
+		return ELCResult::error;
 	HANDLE handles[] = { MYPELC->userEventCompleted, MYPELC->userEventCancelled, MYPELC->userEventTimeout, MYPELC->userEventError };
-	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, (INFINITE != iTimer && 0 < iTimer ? iTimer * ONESECOND : INFINITE));
+	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, iTimer);
+	ForbidReading(pelc);
+	Sleep(10);
 	switch (dw)
 	{
 	case WAIT_FAILED:
-		MYPFNC->eventResult = EventResult::eventError;
+		MYPFNC->eventResult = ELCResult::error;
 		break;
 	case WAIT_TIMEOUT:
-		MYPFNC->eventResult = EventResult::eventNone;
+		MYPFNC->eventResult = ELCResult::none;
 		break;
 	default:
+		int index = dw - WAIT_OBJECT_0;
+		switch (index)
 		{
-			int index = dw - WAIT_OBJECT_0;
-			switch (index)
-			{
-			case 0:
-				MYPFNC->eventResult = EventResult::eventCompleted;
-				break;
-			case 1:
-				MYPFNC->eventResult = EventResult::eventCancelled;
-				break;
-			case 2:
-				MYPFNC->eventResult = EventResult::eventTimeout;
-				break;
-			default:
-				MYPFNC->eventResult = EventResult::eventError;
-				break;
-			}
-			// arrived here all events can be closed
-			RazAsyncEnvironment(pelc);
-			RazInProgress(pelc);
+		case 0:
+			MYPFNC->eventResult = ELCResult::completed;
+			break;
+		case 1:
+			MYPFNC->eventResult = ELCResult::cancelled;
+			*pfCancelled = true;
+			break;
+		case 2:
+			MYPFNC->eventResult = ELCResult::timeout;
+			*pfTimeout = true;
+			break;
+		default:
+			MYPFNC->eventResult = ELCResult::error;
+			break;
 		}
+		if (ELCResult::completed != MYPFNC->eventResult)
+		{
+			Sleep(MYPELC->timerBeforeAbort);
+			BOOL f;
+			ELCAbort(pelc, &f);
+		}
+		break;
 	}
-	ForbidReading(pelc);
-	if (EventResult::eventCompleted != MYPFNC->eventResult)
-	{
-		bool f;
-		ELCAbort(pelc, &f);
-	}
+	// arrived here all events can be closed
+	RazAsyncEnvironment(pelc);
+	RazInProgress(pelc);
 	return MYPFNC->eventResult;
 }
 
@@ -1995,52 +2010,57 @@ DRIVERAPI EventResult __stdcall ELCWaitAsync(ELC pelc, int iTimer)
 /// <param name="pelc"></param>
 /// <param name="ppchBuffer"></param>
 /// <param name="iTimer">Timer to wait for completion</param>
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCReadAsync(ELC pelc, int iTimer)
+DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
-	bool fOK = false;
+	BOOL fOK = false;
 	//	*pfRead = *pfDocumentInside = false;
 
 		// are we already inside an async operation ?
 	if (IsInProgress(pelc, true))
 		return false;
 
-	char * REQUEST = READ_REQUEST;
-	char * REQUEST_EX = READ_REQUEST_EX;
-	char * REQUEST_DATA = READ_REQUEST_DATA;
+	char* REQUEST = READ_REQUEST;
+	char* REQUEST_EX = READ_REQUEST_EX;
+	char* REQUEST_DATA = READ_REQUEST_DATA;
 
-	char * REPLY = READ_REPLY;
-	char * REPLY_CR = READ_REPLY_CR;
-	char * REPLY_EX = READ_REPLY_EX;
+	char* REPLY = READ_REPLY;
+	char* REPLY_CR = READ_REPLY_CR;
+	char* REPLY_EX = READ_REPLY_EX;
 
-	MYPELC->read.pFnc = (char *)"READ";
+	MYPELC->read.pFnc = READ_FNC;
 	MYFNC(MYPELC->read);
 	SETREQUESTANDREPLY;
+	LOGDATETIME(MYPELC->pCurrentFnc->pFnc);
 
-	return StartAsync(pelc, iTimer);
+	return StartAsync(pelc, iTimer, startTimerEvent, asyncOperationEndedEvent);
 }
 
 /// <summary>
 /// Get
 /// </summary>
 /// <param name="pelc"></param>
-/// <param name="ppchRawBuffer">Pointer to a pointer of char that will contain the content read by the ELC</param>
-/// <param name="ppchChpnBuffer">Pointer to a pointer of char that will contain the content read by the ELC modified to fit CHPN needs</param>
-/// <param name="pfDocumentInside">True if the document is still inside after reading</param>
+/// <param name="ppchRawBuffer">Buffer to receive raw CMC7</param>
+/// <param name="sizeRawBuffer">Size of raw buffer</param>
+/// <param name="pchChpnBuffer">Buffer to receive CHPN compatible CMC7</param>
+/// <param name="sizeChpnBuffer">Size of chpn buffer</param>
+/// <param name="fDocumentInside">True if the document is still inside after reading</param>
 /// <returns>True is successfull, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCReadResult(ELC pelc, char ** ppchRawBuffer, char ** ppchChpnBuffer, bool * pfDocumentInside)
+DRIVERAPI ELCResult __stdcall ELCReadResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentIsStillInside)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
 	if (IsInProgress(pelc, true))
-		return false;
+		return ELCResult::none;
 	if (&MYPELC->read != MYPELC->pCurrentFnc)
-		return false;
-	if (EventResult::eventCompleted != MYPFNC->eventResult)
-		return false;
+		return ELCResult::error;
+	if (ELCResult::completed != MYPFNC->eventResult)
+		return MYPFNC->eventResult;
 	if (0 == MYPFNC->dwReplyDataSize || NULL == MYPFNC->pReplyData)
-		return false;
+		return ELCResult::error;
 
 #define	READ_CR1_OK						0x31
 #define	READ_CR1_KO						0x34
@@ -2050,36 +2070,36 @@ DRIVERAPI bool __stdcall ELCReadResult(ELC pelc, char ** ppchRawBuffer, char ** 
 #define	READ_CR3_DOCUMENT_EJECTED	0x30
 #define	READ_CR3_DOCUMENT_INSIDE	0x31
 
-	int len = MYPFNC->dwReplyDataSize + 1;
+	DWORD len = MYPFNC->dwReplyDataSize + 1;
 	// prepare output buffers
-	if (NULL != ppchRawBuffer)
+	if (NULL != pchRawBuffer && 0 != sizeRawBuffer)
 	{
-		*ppchRawBuffer = CALLOC(len);
-		strcpy_s(*ppchRawBuffer, len, MYPFNC->pReplyData);
+		memset(pchRawBuffer, 0, sizeRawBuffer);
+		strcpy_s(pchRawBuffer, sizeRawBuffer - 1, MYPFNC->pReplyData);
 	}
-	if (NULL != ppchChpnBuffer)
+	if (NULL != pchChpnBuffer && 0 != sizeChpnBuffer)
 	{
-		*ppchChpnBuffer = CALLOC(len);
-		strcpy_s(*ppchChpnBuffer, len, MYPFNC->pReplyData);
-		for (DWORD i = 0; i < MYPFNC->dwReplyDataSize; i++)
+		memset(pchChpnBuffer, 0, sizeChpnBuffer);
+		strcpy_s(pchChpnBuffer, sizeChpnBuffer - 1, MYPFNC->pReplyData);
+		for (DWORD i = 0; i < len; i++)
 		{
-			switch (*ppchChpnBuffer[i])
+			switch ((pchChpnBuffer)[i])
 			{
 			case 0x3A: // S1
-				*ppchChpnBuffer[i] = 'B';
+				(pchChpnBuffer)[i] = 'B';
 				break;
 			case 0x3B: // S2
 				break;
 			case 0x3C: // S3
-				*ppchChpnBuffer[i] = 'D';
+				(pchChpnBuffer)[i] = 'D';
 				break;
 			case 0x3D: // S4
 				break;
 			case 0x3E: // S5
-				*ppchChpnBuffer[i] = 'F';
+				(pchChpnBuffer)[i] = 'F';
 				break;
 			case 0x3F: // character failed to be read
-				*ppchChpnBuffer[i] = 'A';
+				(pchChpnBuffer)[i] = 'A';
 				break;
 			}
 		}
@@ -2089,31 +2109,11 @@ DRIVERAPI bool __stdcall ELCReadResult(ELC pelc, char ** ppchRawBuffer, char ** 
 	{
 		if (READ_CR2_OK == CR2)
 		{
-			*pfDocumentInside = READ_CR3_DOCUMENT_INSIDE == CR3;
-			return true;
+			*pfDocumentIsStillInside = READ_CR3_DOCUMENT_INSIDE == CR3;
+			return MYPFNC->eventResult = ELCResult::completed;
 		}
 	}
-	return false;
-}
-
-/// <summary>
-/// Synchronous read
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="pszData"></param>
-/// <param name="pfSuccess"></param>
-/// <param name="iTimer"></param>
-/// <returns></returns>
-DRIVERAPI bool __stdcall ELCRead(ELC pelc, int iTimer, char ** ppchRawBuffer, char ** ppchChpnBuffer, bool * pfDocumentInside)
-{
-	MYPELCSTRUCT;
-	if (ELCReadAsync(pelc, iTimer))
-		switch (ELCWaitAsync(pelc, 0))
-		{
-		case EventResult::eventCompleted:
-			return ELCReadResult(pelc, ppchRawBuffer, ppchChpnBuffer, pfDocumentInside);
-		}
-	return false;
+	return MYPFNC->eventResult = ELCResult::completedWithError;
 }
 
 /// <summary>
@@ -2123,48 +2123,62 @@ DRIVERAPI bool __stdcall ELCRead(ELC pelc, int iTimer, char ** ppchRawBuffer, ch
 /// <param name="pszData"></param>
 /// <param name="pfSuccess">true if printing went successfully, false otherwise</param>
 /// <param name="iTimer">Timer to wait for completion</param>
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCWriteAsync(ELC pelc, const char * pszData, int iTimer)
+DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
-	bool fOK = false;
+	BOOL fOK = false;
 
 	// are we already inside an async operation ?
 	if (IsInProgress(pelc, true))
 		return false;
 
-	char * pb;
+	char* pb;
+	int size;
 	// set size of data to send for printing
 	if (NULL != pszData && MAX_WRITE_DATA_SIZE < (strlen(pszData)))
 	{
-		pb = (char *)CALLOC(MAX_WRITE_DATA_SIZE + 1);
+		size = MAX_WRITE_DATA_SIZE + 1;
+		pb = (char*)CALLOC(size);
 		if (NULL != pb)
-			strncpy_s(pb, sizeof(pb), pszData, sizeof(pb) - 1);
+			strncpy_s(pb, size, pszData, size - 1);
+		else return false;
 	}
 	else if (NULL != pszData)
 	{
-		pb = (char *)CALLOC(strlen(pszData) + 1);
+		size = strlen(pszData) + 1;
+		pb = (char*)CALLOC(size);
 		if (NULL != pb)
-			strcpy_s(pb, sizeof(pb), pszData);
+			strcpy_s(pb, size, pszData);
+		else return false;
 	}
 	else
 	{
 		return false;
 	}
+	if (NULL != pchBuffer && 0 != sizeBuffer && NULL != pb)
+	{
+		size = sizeBuffer - 1;
+		memset(pchBuffer, 0, sizeBuffer);
+		memcpy_s(pchBuffer, size, pb, min(size, (int)strlen(pb)));
+	}
 
-	char * REQUEST = WRITE_REQUEST;
-	char * REQUEST_EX = WRITE_REQUEST_EX;
-	char * REQUEST_DATA = pb;	// data to write
+	char* REQUEST = WRITE_REQUEST;
+	char* REQUEST_EX = WRITE_REQUEST_EX;
+	char* REQUEST_DATA = pb;
 
-	char * REPLY = WRITE_REPLY;
-	char * REPLY_CR = WRITE_REPLY_CR;
-	char * REPLY_EX = WRITE_REPLY_EX;
+	char* REPLY = WRITE_REPLY;
+	char* REPLY_CR = WRITE_REPLY_CR;
+	char* REPLY_EX = WRITE_REPLY_EX;
 
-	MYPELC->write.pFnc = (char *)"WRITE";
+	MYPELC->write.pFnc = WRITE_FNC;
 	MYFNC(MYPELC->write);
-	SETREQUESTANDREPLY(MYPELC->write);
+	SETREQUESTANDREPLY;
+	LOGDATETIME(MYPELC->pCurrentFnc->pFnc);
 
-	return StartAsync(pelc, iTimer);
+	return StartAsync(pelc, iTimer, startTimerEvent, asyncOperationEndedEvent);
 }
 
 /// <summary>
@@ -2175,16 +2189,16 @@ DRIVERAPI bool __stdcall ELCWriteAsync(ELC pelc, const char * pszData, int iTime
 /// <param name="pfSuccess">true if printing went successfully, false otherwise</param>
 /// <param name="iTimer">Timer to wait for completion</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCWriteResult(ELC pelc)
+DRIVERAPI ELCResult __stdcall ELCWriteResult(ELC pelc)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
 	if (IsInProgress(pelc, true))
-		return false;
+		return ELCResult::none;
 	if (&MYPELC->write != MYPELC->pCurrentFnc)
-		return false;
-	if (EventResult::eventCompleted != MYPFNC->eventResult)
-		return false;
+		return ELCResult::error;
+	if (ELCResult::completed != MYPFNC->eventResult)
+		return MYPFNC->eventResult;
 
 #define WRITE_CR1_OK					0x31
 #define WRITE_CR1_KO					0x34
@@ -2196,9 +2210,35 @@ DRIVERAPI bool __stdcall ELCWriteResult(ELC pelc)
 	{
 		if (WRITE_CR2_OK == CR2)
 		{
-			return true;
+			return MYPFNC->eventResult = ELCResult::completed;
 		}
 	}
+	return MYPFNC->eventResult = ELCResult::completedWithError;
+}
+
+/// <summary>
+/// Synchronous read
+/// </summary>
+/// <param name="pelc"></param>
+/// <param name="iTimer"></param>
+/// <param name="ppchRawBuffer">Buffer to receive raw CMC7</param>
+/// <param name="sizeRawBuffer">Size of raw buffer</param>
+/// <param name="pchChpnBuffer">Buffer to receive CHPN compatible CMC7</param>
+/// <param name="sizeChpnBuffer">Size of chpn buffer</param>
+/// <param name="pfDocumentInside"></param>
+/// <param name="pfTimeout"></param>
+/// <param name="pfCancelled"></param>
+/// <returns></returns>
+DRIVERAPI BOOL __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside, BOOL* pfTimeout, BOOL* pfCancelled)
+{
+	MYPELCSTRUCT;
+	*pfTimeout = true;
+	if (ELCReadAsync(pelc, iTimer, startTimerEvent, NULL))
+		switch (ELCWaitAsync(pelc, 0, pfTimeout, pfCancelled))
+		{
+		case ELCResult::completed:
+			return ELCResult::completed == ELCReadResult(pelc, pchRawBuffer, sizeRawBuffer, pchChpnBuffer, sizeChpnBuffer, pfDocumentInside);
+		}
 	return false;
 }
 
@@ -2209,15 +2249,17 @@ DRIVERAPI bool __stdcall ELCWriteResult(ELC pelc)
 /// <param name="pszData"></param>
 /// <param name="pfSuccess"></param>
 /// <param name="iTimer"></param>
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns></returns>
-DRIVERAPI bool __stdcall ELCWrite(ELC pelc, const char * pszData, int iTimer)
+DRIVERAPI BOOL __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent, BOOL* pfTimeout, BOOL* pfCancelled)
 {
 	MYPELCSTRUCT;
-	if (ELCWriteAsync(pelc, pszData, iTimer))
-		switch (ELCWaitAsync(pelc, 0))
+	if (ELCWriteAsync(pelc, pszData, pchBuffer, sizeBuffer, iTimer, startTimerEvent, NULL))
+		switch (ELCWaitAsync(pelc, 0, pfTimeout, pfCancelled))
 		{
-		case EventResult::eventCompleted:
-			return ELCWriteResult(pelc);
+		case ELCResult::completed:
+			return ELCResult::completed == ELCWriteResult(pelc);
 		}
 	return false;
 }
@@ -2227,15 +2269,26 @@ DRIVERAPI bool __stdcall ELCWrite(ELC pelc, const char * pszData, int iTimer)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>true if successfull, false otherwise</returns>
-DRIVERAPI bool __stdcall ELCInitiateDialog(ELC pelc)
+DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc)
 {
 	MYPELCSTRUCT;
-	bool fOK;
+	BOOL fOK;
 	DWORD dwError;
 	if (fOK = AllowReading(pelc))
 	{
-		if (fOK = StartSending(pelc, &dwError, ONESECOND))
+		if (fOK = SendENQ(pelc, &dwError))
+		{
+			BOOL fTimeout;
+			char b = 0x00;
+			if (!(fOK = WaitACK(pelc, &b, &dwError, &fTimeout)))
+			{
+				if (fTimeout)
+					LOG(" - TIMEOUT", false);
+				else
+					LOGEX("- ERROR:", dwError, false);
+			}
 			SendEOT(pelc, &dwError);
+		}
 		ForbidReading(pelc);
 	}
 	return fOK;
@@ -2250,7 +2303,7 @@ DRIVERAPI bool __stdcall ELCInitiateDialog(ELC pelc)
 DRIVERAPI char __stdcall ELCCR(ELC pelc, int index)
 {
 	MYPELCSTRUCT;
-	if (0 <= index && CR_SIZE > index)
+	if (0 <= index && CR_SIZE >= index)
 		return MYPELC->CR.cr[index - 1];
 	else
 		return 0x00;
@@ -2285,12 +2338,12 @@ DRIVERAPI DWORD __stdcall ELCSpeed(ELC pelc, DWORD BaudRate)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI bool __stdcall ELCCancelAsync(ELC pelc)
+DRIVERAPI BOOL __stdcall ELCCancelAsync(ELC pelc)
 {
 	MYPELCSTRUCT;
 	if (IsInProgress(pelc, false))
 	{
-		return SetEvent(MYPELC->eventCancelled);
+		return SetEvent(MYPELC->cancelled);
 	}
 	return false;
 }
@@ -2309,29 +2362,14 @@ DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 		return;
 	switch (timer)
 	{
-	case ELCTimer::timerInitiateRequest:
-		MYPELC->timerInitiateRequest = value;
-		break;
-	case 	ELCTimer::timerTerminateRequest:
-		MYPELC->timerTerminateRequest = value;
-		break;
-	case ELCTimer::timerInitiateReply:
-		MYPELC->timerInitiateReply = value;
-		break;
-	case ELCTimer::timerTerminateReply:
-		MYPELC->timerTerminateReply = value;
-		break;
-	case ELCTimer::timerSendOrder:
-		MYPELC->timerSendOrder = value;
-		break;
-	case ELCTimer::T0:
-		pelcstruct->T0 = value;
-		break;
 	case ELCTimer::T1:
 		pelcstruct->T1 = value;
 		break;
 	case ELCTimer::T2:
 		pelcstruct->T2 = value;
+		break;
+	case ELCTimer::TA:
+		pelcstruct->TA = value;
 		break;
 	case ELCTimer::TR:
 		pelcstruct->TR = value;
@@ -2342,7 +2380,31 @@ DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 	case ELCTimer::TD:
 		pelcstruct->TD = value;
 		break;
+	case ELCTimer::beforeAbort:
+		pelcstruct->timerBeforeAbort = value;
+		break;
 	}
+}
+
+/// <summary>
+/// Indicates whether inside an async operation
+/// </summary>
+/// <param name="pelc"></param>
+/// <returns>True if within an async operation, false otherwise</returns>
+DRIVERAPI  BOOL __stdcall  ELCIsInProgress(ELC pelc)
+{
+	return IsInProgress(pelc, false);
+}
+
+/// <summary>
+/// Indicates whether inside an async operation
+/// </summary>
+/// <param name="pelc"></param>
+/// <returns>True if within an async operation, false otherwise</returns>
+DRIVERAPI  ELCResult __stdcall  ELCLastAsyncResult(ELC pelc)
+{
+	MYPELCSTRUCT;
+	return MYPFNC->eventResult;
 }
 
 #pragma endregion

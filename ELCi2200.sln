@@ -10,6 +10,17 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2A3FDCCA-6C73-46BC-B864-0AABA20C424F}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
+		ELCi2200-ATEN UC232B.pdf = ELCi2200-ATEN UC232B.pdf
+		Protocole_cheque_C4000.pdf = Protocole_cheque_C4000.pdf
+		Protocole_cheque_Elite 200.pdf = Protocole_cheque_Elite 200.pdf
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "ELCManager", "ELCManager\ELCManager.vbproj", "{466CFBC7-2717-437A-AA49-D585AB179564}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ELCDotNet", "ELCDotNet\ELCDotNet.csproj", "{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}"
+	ProjectSection(ProjectDependencies) = postProject
+		{180AFDD6-45EB-4D4F-9945-5A9594AFFC34} = {180AFDD6-45EB-4D4F-9945-5A9594AFFC34}
 	EndProjectSection
 EndProject
 Global
@@ -46,6 +57,30 @@ Global
 		{180AFDD6-45EB-4D4F-9945-5A9594AFFC34}.Release|x64.Build.0 = Release|x64
 		{180AFDD6-45EB-4D4F-9945-5A9594AFFC34}.Release|x86.ActiveCfg = Release|Win32
 		{180AFDD6-45EB-4D4F-9945-5A9594AFFC34}.Release|x86.Build.0 = Release|Win32
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|x64.Build.0 = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Debug|x86.Build.0 = Debug|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|Any CPU.Build.0 = Release|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|x64.ActiveCfg = Release|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|x64.Build.0 = Release|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|x86.ActiveCfg = Release|Any CPU
+		{466CFBC7-2717-437A-AA49-D585AB179564}.Release|x86.Build.0 = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|x64.Build.0 = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Debug|x86.Build.0 = Debug|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x64.ActiveCfg = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x64.Build.0 = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x86.ActiveCfg = Release|Any CPU
+		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

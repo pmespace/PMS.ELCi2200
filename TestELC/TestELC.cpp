@@ -11,14 +11,14 @@
 #define	RESULT		"=> "
 #define	OPEN_ERROR	"Error trying to open the device"
 
-static void MenuEntry(char * buffer)
+static void MenuEntry(char* buffer)
 {
 	std::cout << std::endl << buffer;
 }
 static void MenuReply(int i)
 {
 	char buffer[ONEKB];
-	sprintf_s(buffer, ONEKB, "%C", i);
+	sprintf_s(buffer, sizeof(buffer), "%C", i);
 	std::cout << buffer << std::endl;
 }
 static void MenuClose()
@@ -29,10 +29,10 @@ static void ChooseMenuEntry()
 {
 	std::cout << std::endl << "\t==>";
 }
-static bool TestMenuEntry(char * entries, int entry)
+static BOOL TestMenuEntry(char* entries, int entry)
 {
 	int i;
-	char * upper = (char *)calloc(1, strlen(entries) + 2);
+	char* upper = (char*)calloc(1, strlen(entries) + 2);
 	if (NULL != upper)
 	{
 		// put all options in uppercase
@@ -46,14 +46,13 @@ static bool TestMenuEntry(char * entries, int entry)
 	return false;
 }
 // return true if a close (ESC) character has been entered
-static bool GetMenuEntry(char * entries, int * pc)
+static BOOL GetMenuEntry(char* entries, int* pc)
 {
 	do
 	{
 		*pc = _getch();
-	}
-	while (!TestMenuEntry(entries, *pc));
-	bool fClose = TestMenuEntry("", *pc);
+	} while (!TestMenuEntry(entries, *pc));
+	BOOL fClose = TestMenuEntry("", *pc);
 	if (!fClose)
 		MenuReply(*pc);
 	else
@@ -62,15 +61,19 @@ static bool GetMenuEntry(char * entries, int * pc)
 }
 static void DisplaySuccess(ELC pelc)
 {
-	std::cout << std::endl << RESULT << "OK";// << std::endl;
+	std::cout << std::endl << RESULT << "OK" << std::endl;
 }
 static void DisplayFailed(ELC pelc)
 {
-	std::cout << std::endl << RESULT << "KO";// << std::endl;
+	std::cout << std::endl << RESULT << "KO" << std::endl;
 }
-static void DisplayResult(ELC pelc, const char success, const char * psz)
+static void DisplayMessage(ELC pelc, char* psz)
 {
-	char buffer[ONEKB];
+	std::cout << std::endl << psz;
+}
+static void DisplayResult(ELC pelc, const char success, const char* psz)
+{
+	char dummy[ONEKB];
 	DisplaySuccess(pelc);
 	std::cout << std::endl;
 	for (int i = 1; i <= 3; i++)
@@ -78,8 +81,8 @@ static void DisplayResult(ELC pelc, const char success, const char * psz)
 		char c = ELCCR(pelc, i);
 		if (0x00 != c)
 		{
-			sprintf_s(buffer, ONEKB, "\t==> CR%d: %X", i, c);
-			std::cout << buffer;
+			sprintf_s(dummy, sizeof(dummy), "\t==> CR%d: %X", i, c);
+			std::cout << dummy;
 			if (1 == i)
 				if (success == c)
 					std::cout << " - OK" << std::endl;
@@ -95,9 +98,8 @@ static void DisplayResult(ELC pelc, const char success, const char * psz)
 int main()
 {
 	int c;
-	void * elc;
-	char buffer[ONEKB];
-	bool fClose = false, fContinue = true, fOpen = false;
+	void* elc;
+	BOOL fClose = false, fContinue = true, fOpen = false;
 	if (NULL != (elc = ELCInit()))
 	{
 		while (!fClose && fContinue)
@@ -105,13 +107,13 @@ int main()
 			MenuEntry("U > USB port");
 			MenuEntry("S > Serial port");
 			ChooseMenuEntry();
-			if (!(fClose = GetMenuEntry((char *)"us", &c)))
+			if (!(fClose = GetMenuEntry((char*)"us", &c)))
 			{
-				if (TestMenuEntry((char *)"s", c))
+				if (TestMenuEntry((char*)"s", c))
 				{
 					MenuEntry("1..9 > Port");
 					ChooseMenuEntry();
-					if (!(fClose = GetMenuEntry((char *)"0123456789", &c)))
+					if (!(fClose = GetMenuEntry((char*)"0123456789", &c)))
 					{
 						ELCSetPort(elc, c - '0');
 						fContinue = false;
@@ -120,8 +122,27 @@ int main()
 						fClose = false;
 				}
 				else
-					fContinue = false;
+				{
+					char* ELC_NATIVE_USB_DRIVER = (char*)"USB\\VID_10C4&PID_EA60";
+					char* ATEN_USB_DRIVER = (char*)"USB\\VID_0557&PID_2022";
+					int port;
+
+					// check all USB drivers
+					if (NO_COM_PORT == (port = ELCGetUSBComPort(ATEN_USB_DRIVER)))
+						if (NO_COM_PORT == (port = ELCGetUSBComPort(ELC_NATIVE_USB_DRIVER)))
+							port = NO_COM_PORT;
+					if (NO_COM_PORT != port)
+					{
+						char dummy[ONEKB];
+						sprintf_s(dummy, "Using COM%u", port);
+						DisplayMessage(elc, dummy);
+						ELCSetPort(elc, port);
+						fContinue = false;
+					}
+				}
+
 			}
+			fContinue = false;
 		}
 		fContinue = true;
 		while (!fClose)
@@ -133,9 +154,9 @@ int main()
 			MenuEntry("W > Write check");
 			MenuEntry("A > Abort");
 			ChooseMenuEntry();
-			if (!(fClose = GetMenuEntry((char *)"ptsrwa", &c)))
+			if (!(fClose = GetMenuEntry((char*)"ptsrwa", &c)))
 			{
-				if (TestMenuEntry((char *)"p", c))
+				if (TestMenuEntry((char*)"p", c))
 				{
 #define CURRENT " [CURRENT]"
 					DWORD rate = ELCSpeed(elc, 0);
@@ -147,13 +168,13 @@ int main()
 					sprintf_s(dummy, sizeof(dummy), (CBR_9600 == rate ? "%s %s" : "%s"), "9> 9600 baud rate", CURRENT);
 					MenuEntry(dummy);
 					ChooseMenuEntry();
-					if (!GetMenuEntry((char *)"249", &c))
+					if (!GetMenuEntry((char*)"249", &c))
 					{
-						if (TestMenuEntry((char *)"2", c))
+						if (TestMenuEntry((char*)"2", c))
 							ELCSpeed(elc, 2400);
-						else if (TestMenuEntry((char *)"4", c))
+						else if (TestMenuEntry((char*)"4", c))
 							ELCSpeed(elc, 4800);
-						else if (TestMenuEntry((char *)"9", c))
+						else if (TestMenuEntry((char*)"9", c))
 							ELCSpeed(elc, 9600);
 					}
 					else
@@ -164,56 +185,75 @@ int main()
 				else
 					if (fOpen = ELCOpen(elc))
 					{
-						if (TestMenuEntry((char *)"t", c))
+						if (TestMenuEntry((char*)"t", c))
 						{
 							if (ELCInitiateDialog(elc))
 								DisplaySuccess(elc);
 							else
 								DisplayFailed(elc);
 						}
-						else if (TestMenuEntry((char *)"s", c))
+						else if (TestMenuEntry((char*)"s", c))
 						{
-							bool fPresent;
-							if (ELCStatus(elc, &fPresent))
-								DisplayResult(elc, 0x31, fPresent ? "A document is ready to be read" : "No document ready to be read");
+							BOOL fDocumentReadyToBeRead;
+							if (ELCStatus(elc, &fDocumentReadyToBeRead))
+								DisplayResult(elc, 0x31, fDocumentReadyToBeRead ? "A document is ready to be read" : "No document ready to be read");
 							else
 								DisplayFailed(elc);
 						}
-						else if (TestMenuEntry((char *)"a", c))
+						else if (TestMenuEntry((char*)"a", c))
 						{
-							bool fEjected;
+							BOOL fEjected;
 							if (ELCAbort(elc, &fEjected))
-								DisplayResult(elc, 0x31, fEjected ? "No paper inside the reader" : "Paper not ejected");
+								DisplayResult(elc, 0x31, fEjected ? "Document ejected" : "Document not ejected");
 							else
 								DisplayFailed(elc);
 						}
-						else if (TestMenuEntry((char *)"r", c))
+						else if (TestMenuEntry((char*)"r", c))
 						{
-							char * pchRaw, * pchChpn;
-							int uiRead;
-							bool fRead, fDocumentInside;
-							if (ELCRead(elc, 0, &pchRaw, &pchChpn, &fDocumentInside))
+							char raw[ONEKB], chpn[ONEKB];
+							BOOL fDocumentIsStillInside, fTimeout, fCancelled;
+							HANDLE timerStarted = CreateEvent(NULL, false, false, NULL);
+							if (ELCRead(elc, 10, timerStarted, raw, _countof(raw), chpn, _countof(chpn), &fDocumentIsStillInside, &fTimeout, &fCancelled))
 							{
-								//char dummy[ONEKB];
-								//sprintf_s(dummy, ONEKB, "%s - %s", fRead ? "Readinf was successfull" : "Reading has failed", fDocumentInside ? "Document still inside" : "Document ejected");
-								//DisplayResult(elc, 0x31, dummy);
-								//sprintf_s(buffer, ONEKB, "%s (%d)", pb, uiRead);
-								//std::cout << std::endl << RESULT << buffer;
+								char dummy[ONEKB * 2];
+								sprintf_s(dummy, sizeof(dummy), "CMC7: %s", chpn);
+								DisplayResult(elc, 0x31, fDocumentIsStillInside ? "Document still inside the reader" : "Document ejected");
+								std::cout << std::endl << RESULT << dummy << std::endl;
 							}
 							else
+							{
+								if (fTimeout)
+									DisplayMessage(elc, "TIMEOUT");
+								if (fCancelled)
+									DisplayMessage(elc, "CANCELLED BY USER");
 								DisplayFailed(elc);
+							}
+							CloseHandle(timerStarted);
 						}
-						else if (TestMenuEntry((char *)"w", c))
+						else if (TestMenuEntry((char*)"w", c))
 						{
-							DWORD dw;
-							if (ELCWrite(elc, "Hello World", 30))
+							BOOL fTimeout, fCancelled;
+							char printed[ONEKB];
+							const char* psz = "azertyuiopqsdfghjklmwxcvbnAZERTYUIOPQSDFGHJKLMWXCVBN12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
+							HANDLE timerStarted = CreateEvent(NULL, false, false, NULL);
+							if (ELCWrite(elc, psz, printed, _countof(printed), 10, timerStarted, &fTimeout, &fCancelled))
 							{
-								//DisplayResult(elc);
-								//sprintf_s(buffer, ONEKB, "%s (%d)", pb, dw);
-								//std::cout << std::endl << RESULT << "ECRIT: " << buffer;
+								char buffer[ONEKB * 2];
+								DisplayResult(elc, 0x31, "Printing OK");
+								sprintf_s(buffer, ONEKB * 2, "SENT: %s (%d)", psz, strlen(psz));
+								std::cout << std::endl << RESULT << buffer;
+								sprintf_s(buffer, ONEKB * 2, "PRINTED: %s (%d)", printed, strlen(printed));
+								std::cout << std::endl << RESULT << buffer;
 							}
 							else
+							{
+								if (fTimeout)
+									DisplayMessage(elc, "TIMEOUT");
+								if (fCancelled)
+									DisplayMessage(elc, "CANCELLED BY USER");
 								DisplayFailed(elc);
+							}
+							CloseHandle(timerStarted);
 						}
 						ELCClose(elc);
 					}

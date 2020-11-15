@@ -1,2 +1,25 @@
 LIBRARY ELCI2200
 EXPORTS
+ELCInit				@1
+ELCRelease			@2
+ELCSetPort			@3
+ELCOpen				@4
+ELCPort				@5
+ELCClose			@6
+ELCStatus			@7
+ELCAbort			@8
+ELCWaitAsync		@9
+ELCRead				@10
+ELCReadAsync		@11
+ELCReadResult		@12
+ELCWriteAsync		@13
+ELCWriteResult		@14
+ELCWrite			@15
+ELCInitiateDialog	@16
+ELCCR				@17
+ELCSpeed			@18
+ELCSetTimer			@19
+ELCCancelAsync		@20
+ELCGetUSBComPort	@21
+ELCIsInProgress		@22
+ELCLastAsyncResult	@23

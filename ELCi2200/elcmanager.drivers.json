@@ -1,0 +1,10 @@
+[
+  {
+    "Description": "ATEN USB Driver",
+    "DriverName": "USB\\VID_0557&PID_2022"
+  },
+  {
+    "Description": "ELC Native Driver (doesn't work under Windows 10)",
+    "DriverName": "USB\\VID_10C4&PID_EA60"
+  }
+]
