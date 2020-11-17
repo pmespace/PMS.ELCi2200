@@ -9,14 +9,15 @@ namespace ELCDotNet
 	{
 		public static int MAX_WRITE_DATA_SIZE = 80;
 		public const int NO_COM_PORT = -1;
-		public const int NO_TIMER = -1;
+		public const int NO_TIMER = 0;
+		public const int INFINITE = -1;
 
 		/// <summary>
 		/// Timers that can be set inside the ELC driver
 		/// </summary>
 		public enum ELCTimer
 		{
-			_timeBegin,
+			_timeBegin = -1,
 			T1, // in milliseconds
 			T2, // in milliseconds
 			TA, // in milliseconds
@@ -32,7 +33,7 @@ namespace ELCDotNet
 		/// </summary>
 		public enum ELCResult
 		{
-			_eventBegin,
+			_eventBegin = -1,
 			/// <summary>
 			/// no event to signal (operation, not completed, not cancelled, not in timeout and no error), wait can carry on
 			/// </summary>
@@ -70,7 +71,7 @@ namespace ELCDotNet
 		public static extern bool ELCSetPort(IntPtr pelc, int port);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern bool ELCOpen(IntPtr pelc);
+		public static extern bool ELCOpen(IntPtr pelc, bool useLog);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
 		public static extern int ELCPort(IntPtr pelc);
@@ -85,25 +86,25 @@ namespace ELCDotNet
 		public static extern bool ELCAbort(IntPtr pelc, ref bool documentEjected);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern ELCResult ELCWaitAsync(IntPtr pelc, int iTimer, ref bool timeout, ref bool cancelled);
+		public static extern ELCResult ELCWaitAsync(IntPtr pelc, int iTimer);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
 		public static extern bool ELCReadAsync(IntPtr pelc, int iTimer, SafeWaitHandle timerStartedEvent, SafeWaitHandle asyncOperationEndedEvent);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern bool ELCReadResult(IntPtr pelc, StringBuilder rawBuffer, int sizeRawBuffer, StringBuilder chpnBuffer, int sizeChpnBuffer, ref bool documentIsStillInside);
+		public static extern ELCResult ELCReadAsyncResult(IntPtr pelc, StringBuilder rawBuffer, int sizeRawBuffer, StringBuilder chpnBuffer, int sizeChpnBuffer, ref bool documentIsStillInside);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
 		public static extern bool ELCWriteAsync(IntPtr pelc, StringBuilder toPrint, StringBuilder printed, int sizePrinted, int iTimer, SafeWaitHandle timerStartedEvent, SafeWaitHandle asyncOperationEndedEvent);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern bool ELCWriteResult(IntPtr pelc);
+		public static extern ELCResult ELCWriteAsyncResult(IntPtr pelc);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern bool ELCRead(IntPtr pelc, int iTimer, IntPtr timerStartedEvent, StringBuilder rawBuffer, int sizeRawBuffer, StringBuilder chpnBuffer, int sizeChpnBuffer, ref bool documentIsStillInside, ref bool timeout, ref bool cancelled);
+		public static extern ELCResult ELCRead(IntPtr pelc, int iTimer, IntPtr timerStartedEvent, StringBuilder rawBuffer, int sizeRawBuffer, StringBuilder chpnBuffer, int sizeChpnBuffer, ref bool documentIsStillInside);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
-		public static extern bool ELCWrite(IntPtr pelc, StringBuilder toPrint, StringBuilder printed, int sizePrinted, int iTimer, IntPtr timerStartedEvent, ref bool timeout, ref bool cancelled);
+		public static extern ELCResult ELCWrite(IntPtr pelc, StringBuilder toPrint, StringBuilder printed, int sizePrinted, int iTimer, IntPtr timerStartedEvent);
 
 		[DllImport("ELCi2200.dll", SetLastError = true, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.StdCall)]
 		public static extern bool ELCInitiateDialog(IntPtr pelc);

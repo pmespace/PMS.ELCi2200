@@ -33,7 +33,7 @@ typedef void* ELC;
 
 enum class ELCTimer
 {
-	_timeBegin,
+	_timeBegin = -1,
 	T1,							// in milliseconds
 	T2,							// in milliseconds
 	TA,							// in milliseconds
@@ -49,7 +49,7 @@ enum class ELCTimer
 /// </summary>
 enum class ELCResult
 {
-	_eventBegin,
+	_eventBegin = -1,
 	none, // no event to signal (operation, not completed, not cancelled, not in timeout and no error), wait can carry on
 	error, // an error has occurred, waiting is not required any more
 	timeout, // timeout during operation
@@ -62,23 +62,23 @@ enum class ELCResult
 // indicates an invalid COM port
 #define NO_COM_PORT						-1
 // indicates to wait indefinitely
-#define NO_TIMER							-1
+#define NO_TIMER							0
 
 DRIVERAPI ELC __stdcall ELCInit();
 DRIVERAPI void __stdcall ELCRelease(ELC* ppelc);
 DRIVERAPI BOOL __stdcall ELCSetPort(ELC pelc, int port);
-DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc);
+DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc, BOOL useLog);
 DRIVERAPI int __stdcall ELCPort(ELC pelc);
 DRIVERAPI void __stdcall ELCClose(ELC pelc);
 DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead);
 DRIVERAPI BOOL __stdcall ELCAbort(ELC pelc, BOOL* pfDocumentInside);
-DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer, BOOL* pfTimeout, BOOL* pfCancelled);
+DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer);
 DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE timerStartedEvent, HANDLE asyncOperationEndedEvent);
-DRIVERAPI ELCResult __stdcall ELCReadResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside);
+DRIVERAPI ELCResult __stdcall ELCReadAsyncResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside);
 DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE timerStartedEvent, HANDLE asyncOperationEndedEvent);
-DRIVERAPI ELCResult __stdcall ELCWriteResult(ELC pelc);
-DRIVERAPI BOOL __stdcall ELCRead(ELC pelc, int iTimer, HANDLE timerStartedEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside, BOOL* pfTimeout, BOOL* pfCancelled);
-DRIVERAPI BOOL __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE timerStartedEvent, BOOL* pfTimeout, BOOL* pfCancelled);
+DRIVERAPI ELCResult __stdcall ELCWriteAsyncResult(ELC pelc);
+DRIVERAPI ELCResult __stdcall ELCRead(ELC pelc, int iTimer, HANDLE timerStartedEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside);
+DRIVERAPI ELCResult __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE timerStartedEvent);
 DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc);
 DRIVERAPI char __stdcall ELCCR(ELC pelc, int index);
 DRIVERAPI DWORD __stdcall ELCSpeed(ELC pelc, DWORD dwBaudRate);
@@ -87,5 +87,6 @@ DRIVERAPI BOOL __stdcall ELCCancelAsync(ELC pelc);
 DRIVERAPI int __stdcall ELCGetUSBComPort(char* usbDriver);
 DRIVERAPI  BOOL __stdcall ELCIsInProgress(ELC pelc);
 DRIVERAPI  ELCResult __stdcall  ELCLastAsyncResult(ELC pelc);
+DRIVERAPI void __stdcall ELCSetLogFile(ELC pelc, BOOL f);
 
 #endif

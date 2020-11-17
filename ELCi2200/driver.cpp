@@ -9,6 +9,7 @@
 #include <iostream>
 //#include <synchapi.h>
 //#include <ioapiset.h>
+#include <ShlObj.h>
 
 #pragma region compilation options
 
@@ -120,7 +121,7 @@ typedef struct
 	DWORD nbSession;				// current number of session initiation attempts
 	DWORD nbData;					// current number of data reception attempts
 	REPLYCR CR;						// the CR received from the ELC
-	ELCResult eventResult;	// result of the async operation (read and write operations only)
+	ELCResult elcResult;	// result of the async operation (read and write operations only)
 	//char * pchBuffer;				// exchange buffer used to pass data to or from the order to send to the ELC (read and write operations only)
 } ELCFNC, * PELCFNC;
 
@@ -133,19 +134,18 @@ typedef struct
 	DWORD BaudRate;			// Baudrate at which running
 	int port;					// port used to connect the ELC
 	HANDLE logHandle;			// log file handle
-	HANDLE completed,	// used to signal the thread the process has been completed
-		cancelled,		// used to signal the async thread the process has been cancelled
-		error,				// used to signal the async thread the process has encountered an error
-		mutexStopReading,		// used to indicate the thread must continue to read incoming data
-		eventInProgress;		// allows managing async operations access
+	HANDLE completed,			// used to signal the thread the process has been completed
+		cancelled,				// used to signal the async thread the process has been cancelled
+		error,					// used to signal the async thread the process has encountered an error
+		stopReading,			// used to indicate the thread must stop reading incoming data
+		mutexInProgress;		// allows managing async operations access
 	BOOL fCarryOnReading;
-	HANDLE userEventCompleted,
-		userEventCancelled,
-		userEventTimeout,
-		userEventError,
-		startTimer,
-		startTimerEvent,			// signaled when the timer has indeed been started
-		asyncOperationEndedEvent;	// application given asyncOperationEndedEvent signaled when an async operation terminates
+	BOOL fUseLog,
+		fInProgress;
+	HANDLE startTimer,
+		processingIsOver,
+		userStartTimerEvent,				// user event to signal when timer can be started
+		userAsyncOperationEndedEvent;	// user event to signal when processing is over
 	DWORD T1,
 		T2,
 		TA,
@@ -205,6 +205,14 @@ static const char* STATUS_FNC = "STATUS ORDER";
 static const char* ABORT_FNC = "ABORT ORDER";
 static const char* READ_FNC = "READ ORDER";
 static const char* WRITE_FNC = "WRITE ORDER";
+static const char* COMPLETED_SUCCESSFULLY = "COMPLETED SUCCESSFULLY";
+static const char* COMPLETED_WITH_ERROR = "COMPLETED WITH ERROR";
+static const char* PROCESSING_IS_OVER = "PROCESSING IS OVER";
+static const char* UNKNOWN_ERROR = "UNKNOWN ERROR";
+static const char* ERROR_DURING_PROCESS = "ERROR DURING PROCESS";
+static const char* CANCELLED_BY_USER = "CANCELLED BY USER";
+static const char* TIMEOUT = "TIMEOUT";
+static const char* TIMER_STARTED = "TIMER STARTED";
 
 // protocol timers
 #define TTA										10
@@ -282,6 +290,8 @@ static char* CALLOC(size_t size)
 static void AddLog(ELC pelc, const char* psz, BOOL addCRLF, BOOL fileOnly)
 {
 	MYPELCSTRUCT;
+	if (!MYPELC->fUseLog)
+		return;
 	if (addCRLF)
 	{
 		if (!fileOnly)
@@ -319,6 +329,9 @@ static void AddLog(ELC pelc, const char* psz, BOOL addCRLF, BOOL fileOnly)
 /// <param name="psz"></param>
 static void AddDateTime(ELC pelc, char* psz)
 {
+	MYPELCSTRUCT;
+	if (!MYPELC->fUseLog)
+		return;
 	SYSTEMTIME st;
 	GetLocalTime(&st);
 	char date[ONEKB];
@@ -347,6 +360,8 @@ static void AddDateTime(ELC pelc, char* psz)
 void AddLogEx(ELC pelc, const char* psz, int value, BOOL addCRLF, BOOL fileOnly)
 {
 	MYPELCSTRUCT;
+	if (!MYPELC->fUseLog)
+		return;
 	char dummy[ONEKB];
 	//sprintf_s(dummy, sizeof(dummy), "%s [%u]", psz, value);
 	sprintf_s(dummy, "%s [%u]", psz, value);
@@ -362,6 +377,8 @@ void AddLogEx(ELC pelc, const char* psz, int value, BOOL addCRLF, BOOL fileOnly)
 static void AddLogLastError(ELC pelc, const char* psz, DWORD dwError)
 {
 	MYPELCSTRUCT;
+	if (!MYPELC->fUseLog)
+		return;
 	LPCTSTR strErrorMessage = NULL;
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ARGUMENT_ARRAY | FORMAT_MESSAGE_ALLOCATE_BUFFER,
 		NULL,
@@ -405,27 +422,27 @@ static char* ConvertedRepresentation(char b, char* buffer, int size)
 {
 	switch (b)
 	{
-	case ENQ:
-		sprintf_s(buffer, size, "ENQ");
-		break;
-	case ACK:
-		sprintf_s(buffer, size, "ACK");
-		break;
-	case NAK:
-		sprintf_s(buffer, size, "NAK");
-		break;
-	case STX:
-		sprintf_s(buffer, size, "STX");
-		break;
-	case ETX:
-		sprintf_s(buffer, size, "ETX");
-		break;
-	case EOT:
-		sprintf_s(buffer, size, "EOT");
-		break;
-	default:
-		RawRepresentation(b, buffer, size);
-		break;
+		case ENQ:
+			sprintf_s(buffer, size, "ENQ");
+			break;
+		case ACK:
+			sprintf_s(buffer, size, "ACK");
+			break;
+		case NAK:
+			sprintf_s(buffer, size, "NAK");
+			break;
+		case STX:
+			sprintf_s(buffer, size, "STX");
+			break;
+		case ETX:
+			sprintf_s(buffer, size, "ETX");
+			break;
+		case EOT:
+			sprintf_s(buffer, size, "EOT");
+			break;
+		default:
+			RawRepresentation(b, buffer, size);
+			break;
 	}
 	return buffer;
 }
@@ -433,76 +450,6 @@ static char* ConvertedRepresentation(char b, char* buffer, int size)
 #pragma endregion
 
 #pragma region IO
-
-/// <summary>
-/// Allows specifying that reading the COM poprt is allowed
-/// </summary>
-/// <param name="pelc"></param>
-/// <returns></returns>
-static BOOL AllowReading(ELC pelc)
-{
-	MYPELCSTRUCT;
-	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, 0))
-	{
-	case WAIT_OBJECT_0:
-		MYPELC->fCarryOnReading = true;
-		ReleaseMutex(MYPELC->mutexStopReading);
-		return true;
-	case WAIT_ABANDONED:
-	case WAIT_FAILED:
-	case WAIT_TIMEOUT:
-	default:
-		return false;
-	}
-}
-
-/// <summary>
-/// ALlows specifying reading the COM port is no longer allowed
-/// </summary>
-/// <param name="pelc"></param>
-/// <returns></returns>
-static BOOL ForbidReading(ELC pelc)
-{
-	MYPELCSTRUCT;
-	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, 0))
-	{
-	case WAIT_OBJECT_0:
-		MYPELC->fCarryOnReading = false;
-		ReleaseMutex(MYPELC->mutexStopReading);
-		return true;
-	case WAIT_ABANDONED:
-	case WAIT_FAILED:
-	case WAIT_TIMEOUT:
-	default:
-		return false;
-	}
-}
-
-/// <summary>
-/// Indicates whether reading the COM port is still allowed or not
-/// Being able to take the mutex means it's been released by the process thus no more reading is requested
-/// Only if the mutex can't be taken should reading to continue
-/// </summary>
-/// <param name="pelc"></param>
-/// <returns></returns>
-static BOOL CanContinueReading(ELC pelc)
-{
-	MYPELCSTRUCT;
-	switch (DWORD dw = WaitForSingleObject(MYPELC->mutexStopReading, INFINITE))
-	{
-	case WAIT_OBJECT_0:
-	{
-		BOOL result = MYPELC->fCarryOnReading;
-		ReleaseMutex(MYPELC->mutexStopReading);
-		return result;
-	}
-	//case WAIT_ABANDONED:
-	//case WAIT_FAILED:
-	//case WAIT_TIMEOUT:
-	default:
-		return false;
-	}
-}
 
 /// <summary>
 /// Write data onto the ELC communication port
@@ -529,7 +476,7 @@ static BOOL WriteData(ELC pelc, char* data, int length, int* piWritten, LPDWORD 
 			{
 				if (WAIT_OBJECT_0 == (*pdwError = WaitForSingleObject(o.hEvent, (DWORD)WRITE_COMMAND_TIMER)))
 				{
-					if (GetOverlappedResult(MYPELC->handle, &o, (LPDWORD)piWritten, FALSE))
+					if (GetOverlappedResult(MYPELC->handle, &o, (LPDWORD)piWritten, false))
 						success = true;
 					else
 						*pdwError = GetLastError();
@@ -602,72 +549,76 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 				keepCarryOn = false;
 				if (ERROR_IO_PENDING == (*pdwError = GetLastError()))
 				{
-					HANDLE handles[] = { o.hEvent, MYPELC->mutexStopReading };
+					HANDLE handles[] = { o.hEvent, MYPELC->stopReading };
 					switch (DWORD dw = WaitForMultipleObjects(_countof(handles), handles, false, dwTimeout))
 					{
-					case WAIT_FAILED:
-						LOGLASTERROR("WAIT_FAILED", *pdwError = GetLastError());
-						break;
+						case WAIT_FAILED:
+							LOGLASTERROR("WAIT_FAILED", *pdwError = GetLastError());
+							break;
 
-					case WAIT_TIMEOUT:
-						*pfTimeout = true;
-						LOGLASTERROR("WAIT_TIMEOUT", *pdwError = GetLastError());
-						break;
+						case WAIT_TIMEOUT:
+							*pfTimeout = true;
+							LOGLASTERROR("WAIT_TIMEOUT", *pdwError = GetLastError());
+							break;
 
-					case WAIT_ABANDONED_0:
-						LOGLASTERROR("WAIT_ABANDONED", *pdwError = GetLastError());
-						break;
+						case WAIT_ABANDONED_0:
+							LOGLASTERROR("WAIT_ABANDONED", *pdwError = GetLastError());
+							break;
 
-					case WAIT_OBJECT_0:
-						switch (dw - WAIT_OBJECT_0)
+						case WAIT_OBJECT_0:
 						{
-						case 0: // overlap
-							if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
+							int index = dw - WAIT_OBJECT_0;
+							if (handles[index] == o.hEvent)
 							{
-								success = true;
-								keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
-								LOGONLY("WAIT_OBJECT: OVERLAPPED");
+								if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
+								{
+									success = true;
+									keepCarryOn = 0 == *pdwRead;//&& CanContinueReading(pelc);
+									LOGONLY("WAIT_OBJECT: OVERLAPPED");
+								}
+								else
+								{
+									LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
+								}
+							}
+							else if (handles[index] == MYPELC->stopReading)
+							{
+								LOGONLY("WAIT_OBJECT: STOP READING ");
+								keepCarryOn = false;
 							}
 							else
 							{
-								LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
+								LOGLASTERROR("WAIT_OBJECT", *pdwError = GetLastError());
 							}
 							break;
-
-						case 1: // stop reading
-							LOGONLY("WAIT_OBJECT: STOP READING ");
-							break;
+						}
 
 						default:
-							LOGLASTERROR("WAIT_OBJECT", *pdwError = GetLastError());
+						{
+							//switch (*pdwError)
+							//{
+								/* this is the error reported using the native USB cable delivered with the ELC (cp210x by Silicon Labs)
+								*  but when receiving that error using GetOverlappedResult either never returns (if using true when calling the function
+								*  or keeps giving the same error (if using false when calling the function) => it doesn't work at all, remove comment
+								*  at your own risks */
+								//case 997:
+								//	if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
+								//	{
+								//		success = true;
+								//		keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
+								//		LOGONLY("WAIT_OBJECT: OVERLAPPED");
+								//	}
+								//	else
+								//	{
+								//		LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
+								//	}
+								//	break;
+							//default:
+							LOGLASTERROR("READFILE", *pdwError = GetLastError());
+							//	break;
+							//}
 							break;
 						}
-						break;
-
-					default:
-						//switch (*pdwError)
-						//{
-							/* this is the error reported using the native USB cable delivered with the ELC (cp210x by Silicon Labs)
-							*  but when receiving that error using GetOverlappedResult either never returns (if using true when calling the function
-							*  or keeps giving the same error (if using false when calling the function) => it doesn't work at all, remove comment
-							*  at your own risks */
-							//case 997:
-							//	if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
-							//	{
-							//		success = true;
-							//		keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
-							//		LOGONLY("WAIT_OBJECT: OVERLAPPED");
-							//	}
-							//	else
-							//	{
-							//		LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
-							//	}
-							//	break;
-						//default:
-						LOGLASTERROR("READFILE", *pdwError = GetLastError());
-						//	break;
-						//}
-						break;
 					}
 				}
 				else
@@ -679,7 +630,7 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 			{
 				if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
 				{
-					keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
+					keepCarryOn = 0 == *pdwRead && WAIT_OBJECT_0 != WaitForSingleObject(MYPELC->stopReading, 0);
 				}
 				else
 				{
@@ -701,9 +652,10 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 /// Safely close a handle
 /// </summary>
 /// <param name="h"></param>
-static void CloseMyHandle(HANDLE h)
+static void CloseMyHandle(HANDLE* h)
 {
-	if (NULL != h) CloseHandle(h);
+	if (NULL != *h) CloseHandle(*h);
+	*h = NULL;
 }
 
 /// <summary>
@@ -712,50 +664,79 @@ static void CloseMyHandle(HANDLE h)
 /// <param name="pelc"></param>
 /// <param name="fAcquireMutex">If true the mutex can be acquired, if false the mutex is released if acquired</param>
 /// <returns>True if within an async operation, false otherwise</returns>
-static BOOL IsInProgress(ELC pelc, BOOL fAcquireMutex)
+static BOOL ResetInProgress(ELC pelc)
 {
 	MYPELCSTRUCT;
-	// veriy an async operation is in progress
-	DWORD dw = WaitForSingleObject(MYPELC->eventInProgress, 0);
-	switch (dw)
+	// take the mutex
+	switch (WaitForSingleObject(MYPELC->mutexInProgress, INFINITE))
 	{
-	case WAIT_OBJECT_0:
-		// not inside an async operation
-		if (!fAcquireMutex)
-			ReleaseMutex(MYPELC->eventInProgress);
-		return false;
-
-	case WAIT_TIMEOUT:
-		// an async operation is already in progress
-		return true;
+		case WAIT_OBJECT_0:
+			MYPELC->fInProgress = false;
+			SetEvent(MYPELC->stopReading);
+			SetEvent(MYPELC->processingIsOver);
+			if (NULL != MYPELC->userAsyncOperationEndedEvent)
+				SetEvent(MYPELC->userAsyncOperationEndedEvent);
+			ReleaseMutex(MYPELC->mutexInProgress);
+			return true;
 	}
-	// arrived here a cCRITICAL ERROR HAS OCCURRED
+	// arrived here a CRITICAL ERROR HAS OCCURRED
 	return false;
 }
 
 /// <summary>
-/// Indicates the async operation has ended
+/// Indicates whether inside an async operation
 /// </summary>
 /// <param name="pelc"></param>
-static void RazInProgress(ELC pelc)
+/// <param name="fAcquireMutex">If true the mutex can be acquired, if false the mutex is released if acquired</param>
+/// <returns>True if within an async operation, false otherwise</returns>
+static BOOL SetInProgress(ELC pelc)
 {
 	MYPELCSTRUCT;
-	ReleaseMutex(MYPELC->eventInProgress);
+	// take the mutex
+	switch (WaitForSingleObject(MYPELC->mutexInProgress, INFINITE))
+	{
+		case WAIT_OBJECT_0:
+			MYPELC->fInProgress = true;
+			ResetEvent(MYPELC->stopReading);
+			ResetEvent(MYPELC->startTimer);
+			ResetEvent(MYPELC->processingIsOver);
+			ReleaseMutex(MYPELC->mutexInProgress);
+			return true;
+	}
+	// arrived here a CRITICAL ERROR HAS OCCURRED
+	return false;
+}
+
+/// <summary>
+/// Indicates whether inside an async operation
+/// </summary>
+/// <param name="pelc"></param>
+/// <returns>True if within an async operation, false otherwise</returns>
+static BOOL IsInProgress(ELC pelc)
+{
+	MYPELCSTRUCT;
+	// veriy an async operation is in progress
+	switch (WaitForSingleObject(MYPELC->mutexInProgress, 0))
+	{
+		case WAIT_OBJECT_0:
+			BOOL result = MYPELC->fInProgress;
+			ReleaseMutex(MYPELC->mutexInProgress);
+			return result;
+	}
+	return false;
 }
 
 /// <summary>
 /// Prepare async environment
 /// </summary>
 /// <param name="pelc"></param>
-static void RazAsyncEnvironment(ELC pelc)
+/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
+/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
+static void PrepareAsyncEnvironment(ELC pelc, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
-	CloseMyHandle(MYPELC->userEventCompleted);
-	CloseMyHandle(MYPELC->userEventCancelled);
-	CloseMyHandle(MYPELC->userEventTimeout);
-	CloseMyHandle(MYPELC->userEventError);
-	CloseMyHandle(MYPELC->startTimer);
-	MYPELC->startTimer = NULL;
+	MYPELC->userAsyncOperationEndedEvent = asyncOperationEndedEvent;
+	MYPELC->userStartTimerEvent = startTimerEvent;
 }
 
 typedef struct
@@ -773,48 +754,59 @@ DWORD WINAPI ThreadAsyncResult(_In_ LPVOID lpParameter)
 {
 	PTHREADPROCASYNCRESULT pthr = (PTHREADPROCASYNCRESULT)lpParameter;
 	ELC pelc = (PELCSTRUCT)pthr->pelc;
+	MYPELCSTRUCT;
 
 	HANDLE handles[] = { MYPELC->completed, MYPELC->cancelled, MYPELC->error };
 	// ready to start
 	SetEvent(pthr->started);
-	DWORD timerToStart = (INFINITE != pthr->timer && NO_TIMER < pthr->timer ? pthr->timer * ONESECOND : INFINITE);
+	DWORD timerToStart = (INFINITE == pthr->timer ? INFINITE : pthr->timer * ONESECOND);
 	// wait for processing to start to start timer and warn the caller
-	if (NULL != MYPELC->startTimer)
-		WaitForSingleObject(MYPELC->startTimer, INFINITE);
+	WaitForSingleObject(MYPELC->startTimer, INFINITE);
 	// indicate the calling application it can start its own timer
-	if (NULL != MYPELC->startTimerEvent)
-		SetEvent(MYPELC->startTimerEvent);
+	if (NULL != MYPELC->userStartTimerEvent)
+		SetEvent(MYPELC->userStartTimerEvent);
 	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, timerToStart);
 	switch (dw)
 	{
-	case WAIT_FAILED:
-		dw = GetLastError();
-		SetEvent(MYPELC->userEventError);
-		break;
-	case WAIT_TIMEOUT:
-		SetEvent(MYPELC->userEventTimeout);
-		break;
-	default:
-	{
-		int index = dw - WAIT_OBJECT_0;
-		switch (index)
-		{
-		case 0:
-			SetEvent(MYPELC->userEventCompleted);
+		case WAIT_FAILED:
+			dw = GetLastError();
+			MYPFNC->elcResult = ELCResult::error;
 			break;
-		case 1:
-			SetEvent(MYPELC->userEventCancelled);
+		case WAIT_TIMEOUT:
+			MYPFNC->elcResult = ELCResult::timeout;
+			LOG(TIMEOUT, true);
 			break;
 		default:
-			SetEvent(MYPELC->userEventError);
+		{
+			int index = dw - WAIT_OBJECT_0;
+			if (handles[index] == MYPELC->completed)
+			{
+				MYPFNC->elcResult = ELCResult::completed;
+			}
+			else if (handles[index] == MYPELC->cancelled)
+			{
+				MYPFNC->elcResult = ELCResult::cancelled;
+				LOG(CANCELLED_BY_USER, true);
+			}
+			else if (handles[index] == MYPELC->error)
+			{
+				MYPFNC->elcResult = ELCResult::error;
+				LOG(ERROR_DURING_PROCESS, true);
+			}
+			else
+			{
+				MYPFNC->elcResult = ELCResult::error;
+				LOG(UNKNOWN_ERROR, true);
+			}
 			break;
 		}
 	}
-	}
-	CloseMyHandle(MYPELC->completed);
-	CloseMyHandle(MYPELC->cancelled);
-	CloseMyHandle(MYPELC->error);
-	CloseHandle(pthr->started);
+	LOG(PROCESSING_IS_OVER, true);
+	CloseHandle(MYPELC->completed);
+	CloseHandle(MYPELC->cancelled);
+	CloseHandle(MYPELC->error);
+	// release waiting thread
+	ResetInProgress(pelc);
 	free(pthr);
 	return 0;
 }
@@ -835,34 +827,28 @@ static BOOL StartAsyncResultThread(ELC pelc, int iTimer)
 	MYPELC->completed = CreateEvent(NULL, false, false, NULL);
 	MYPELC->cancelled = CreateEvent(NULL, false, false, NULL);
 	MYPELC->error = CreateEvent(NULL, false, false, NULL);
-	HANDLE h = CreateThread(NULL, ONEKB * 50, ThreadAsyncResult, pthr, 0, NULL);
-	if (NULL != pthr->started)
-		WaitForSingleObject(pthr->started, INFINITE);
-	if (NULL == h)
+	if (NULL != pthr->started &&
+		NULL != MYPELC->completed &&
+		NULL != MYPELC->cancelled &&
+		NULL != MYPELC->error)
 	{
-		CloseMyHandle(MYPELC->completed);
-		CloseMyHandle(MYPELC->cancelled);
-		return false;
+		HANDLE h = CreateThread(NULL, ONEKB * 50, ThreadAsyncResult, pthr, 0, NULL);
+		if (NULL != h)
+		{
+			WaitForSingleObject(pthr->started, INFINITE);
+			CloseHandle(pthr->started);
+			return true;
+		}
+		else
+		{
+			CloseHandle(MYPELC->completed);
+			CloseHandle(MYPELC->cancelled);
+			CloseHandle(MYPELC->error);
+			CloseHandle(pthr->started);
+			return false;
+		}
 	}
-	return true;
-}
-
-/// <summary>
-/// Prepare async environment
-/// </summary>
-/// <param name="pelc"></param>
-/// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
-/// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
-static void PrepareAsyncEnvironment(ELC pelc, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
-{
-	MYPELCSTRUCT;
-	MYPELC->asyncOperationEndedEvent = asyncOperationEndedEvent;
-	MYPELC->startTimerEvent = startTimerEvent;
-	MYPELC->startTimer = CreateEvent(NULL, true, false, NULL);
-	MYPELC->userEventCompleted = CreateEvent(NULL, true, false, NULL);
-	MYPELC->userEventTimeout = CreateEvent(NULL, true, false, NULL);
-	MYPELC->userEventCancelled = CreateEvent(NULL, true, false, NULL);
-	MYPELC->userEventError = CreateEvent(NULL, true, false, NULL);
+	return false;
 }
 
 #pragma endregion
@@ -1003,9 +989,7 @@ static BOOL SetCommunicationState(ELC pelc, BOOL first, char eofChar)
 	dcb.fRtsControl = RTS_CONTROL_DISABLE;
 	dcb.fAbortOnError = false;
 	dcb.EofChar = eofChar;
-	if (!(result = SetCommState(MYPELC->handle, &dcb)))
-		ELCClose(pelc);
-	else
+	if (result = SetCommState(MYPELC->handle, &dcb))
 	{
 		LOGCRLF;
 		SLEEPAFTERSETCOMMSTATE;
@@ -1039,11 +1023,11 @@ static void DisplayReceivedBuffer(ELC pelc, BOOL result, char* pb, int size, DWO
 	{
 		if (0 == dwReceived)// && 0 != size)
 		{
-			if (NULL != psz)
-			{
-				sprintf_s(dummy, "- TIMEOUT [%u]", dwTimeout);
-				LOG(dummy, false);
-			}
+			//if (NULL != psz)
+			//{
+			//	sprintf_s(dummy, "- TIMEOUT [%u]", dwTimeout);
+			//	LOG(dummy, false);
+			//}
 		}
 		else //if (0 != dwReceived)
 		{
@@ -1135,7 +1119,13 @@ static BOOL GetCMD(ELC pelc, char chExpectedCommand, char* pchCmd, LPDWORD pdwEr
 	return fOK;
 }
 static BOOL WaitACK(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, ACK, pchCmd, pdwError, MYPELC->T1, pfTimeout, "ACK"); if (fOK) {} return fOK; }
-static BOOL WaitENQ(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, ENQ, pchCmd, pdwError, IsInProgress(pelc, false) ? INFINITE : MYPELC->TA, pfTimeout, "ENQ");	if (fOK) {}	return fOK; }
+static BOOL WaitENQ(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout)
+{
+	int t = IsInProgress(pelc) ? INFINITE : MYPELC->TA;
+	BOOL fOK = GetCMD(pelc, ENQ, pchCmd, pdwError, IsInProgress(pelc) ? INFINITE : MYPELC->TA, pfTimeout, "ENQ");
+	if (fOK) {}
+	return fOK;
+}
 static BOOL WaitEOT(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, EOT, pchCmd, pdwError, MYPELC->T1, pfTimeout, "EOT"); return fOK; }
 static BOOL WaitSTX(ELC pelc, char* pchCmd, LPDWORD pdwError, BOOL* pfTimeout) { BOOL fOK = GetCMD(pelc, STX, pchCmd, pdwError, MYPELC->T1, pfTimeout, "STX"); return fOK; }
 
@@ -1338,7 +1328,8 @@ static BOOL ReceiveReply(ELC pelc, DWORD dwTimeout)
 				BOOL fReceive = true;
 				while (fReceive && fContinue)
 				{
-					if (fOK = WaitSTX(pelc, &(b = 0x00), &dwError, &fTimeout))
+					b = 0x00;
+					if (fOK = WaitSTX(pelc, &b, &dwError, &fTimeout))
 					{
 						pReplyBuffer[0] = STX;
 						dwReceivedReplyBufferSize = 1;
@@ -1365,7 +1356,8 @@ static BOOL ReceiveReply(ELC pelc, DWORD dwTimeout)
 									LOG(" IS VALID", false);
 									if (SendACK(pelc, &dwError))
 									{
-										WaitEOT(pelc, &(b = 0x00), &dwError, &fTimeout);
+										b = 0x00;
+										WaitEOT(pelc, &b, &dwError, &fTimeout);
 									}
 									// test received format
 									if (fOK = (sizeof(ELCCMD) == strlen(MYPFNC->pReply) && 0 == memcmp(&pReplyHeader->cmd, MYPFNC->pReply, sizeof(ELCCMD))
@@ -1382,7 +1374,6 @@ static BOOL ReceiveReply(ELC pelc, DWORD dwTimeout)
 											}
 										}
 										MYPFNC->dwReplyDataSize = dwReceivedReplyDataSize;
-										LOG("COMPLETED SCCESSFULLY", true);
 									}
 									fContinue = false;
 								}
@@ -1459,8 +1450,8 @@ DWORD WINAPI ThreadAsyncProcessing(_In_ LPVOID lpParameter)
 	// ready to start
 	SetEvent(pthr->started);
 	// start caller's timer
-	if (NULL != MYPELC->startTimer)
-		SetEvent(MYPELC->startTimer);
+	SetEvent(MYPELC->startTimer);
+	LOG(TIMER_STARTED, true);
 	// start receiving the reply
 	if (ReceiveReply(pthr->pelc, INFINITE))
 		SetEvent(MYPELC->completed);
@@ -1649,19 +1640,17 @@ DRIVERAPI ELC __stdcall ELCInit()
 	if (NULL != (pelcstruct = (PELCSTRUCT)CALLOC(sizeof(ELCSTRUCT))))
 	{
 		ELC pelc = pelcstruct;
-		pelcstruct->handle = NO_FILE;
-		pelcstruct->port = NO_COM_PORT;
-		pelcstruct->BaudRate = CBR_9600;
-		pelcstruct->logHandle = NO_FILE;
-		LOGONLY("reset mutex");
-		pelcstruct->mutexStopReading = NULL;
-		pelcstruct->T1 = TT1;
-		pelcstruct->T2 = TT2;
-		pelcstruct->TA = TTA;
-		pelcstruct->TR = TTR;
-		pelcstruct->TRA = TTRA;
-		pelcstruct->TD = TTD;
-		pelcstruct->timerBeforeAbort = 50;
+		MYPELC->handle = NO_FILE;
+		MYPELC->port = NO_COM_PORT;
+		MYPELC->BaudRate = CBR_9600;
+		MYPELC->logHandle = NO_FILE;
+		MYPELC->T1 = TT1;
+		MYPELC->T2 = TT2;
+		MYPELC->TA = TTA;
+		MYPELC->TR = TTR;
+		MYPELC->TRA = TTRA;
+		MYPELC->TD = TTD;
+		MYPELC->timerBeforeAbort = 50;
 	}
 	return pelcstruct;
 }
@@ -1700,7 +1689,7 @@ DRIVERAPI BOOL __stdcall ELCSetPort(ELC pelc, int port)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc)
+DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc, BOOL UseLogFile)
 {
 	MYPELCSTRUCT;
 	BOOL result = true;
@@ -1728,31 +1717,105 @@ DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc)
 		OPEN_EXISTING,
 		FILE_FLAG_OVERLAPPED,
 		NULL);
-	MYPELC->mutexStopReading = CreateMutex(NULL, false, NULL);
-	MYPELC->eventInProgress = CreateMutex(NULL, false, NULL);
-	if (result = (INVALID_HANDLE_VALUE != MYPELC->handle &&
-		NULL != MYPELC->mutexStopReading &&
-		NULL != MYPELC->eventInProgress &&
+	MYPELC->mutexInProgress = CreateMutex(NULL, false, NULL);
+	MYPELC->stopReading = CreateEvent(NULL, false, false, NULL);
+	MYPELC->startTimer = CreateEvent(NULL, false, false, NULL);
+	MYPELC->processingIsOver = CreateEvent(NULL, false, false, NULL);
+	if (result = (NO_FILE != MYPELC->handle &&
+		NULL != MYPELC->mutexInProgress &&
+		NULL != MYPELC->stopReading &&
+		NULL != MYPELC->startTimer &&
+		NULL != MYPELC->processingIsOver &&
 		SetCommunicationState(pelc, true, 0x00)))
 	{
-		// open log file
-		char* pszLogFileName = (char*)CALLOC(ONEKB);
-		sprintf_s(pszLogFileName, ONEKB, "ELC on COM%u.log", MYPELC->port);
-		MYPELC->logHandle = CreateFile((LPCSTR)pszLogFileName,
-			FILE_GENERIC_WRITE,
-			FILE_SHARE_READ,
-			NULL,
-			OPEN_ALWAYS,
-			FILE_ATTRIBUTE_NORMAL,
-			NULL);
-		free(pszLogFileName);
-		LOGCRLF;
+		if (MYPELC->fUseLog = UseLogFile)
+		{
+			ELCSetLogFile(pelc, true);
+		}
 	}
 	else
 	{
 		ELCClose(pelc);
 	}
 	return result;
+}
+
+/// <summary>
+/// Set or resets log traces
+/// </summary>
+/// <param name="pelc"></param>
+/// <param name="f"></param>
+/// <returns></returns>
+DRIVERAPI void __stdcall ELCSetLogFile(ELC pelc, BOOL f)
+{
+	if (f)
+	{
+		if (NO_FILE == MYPELC->logHandle)
+		{
+			const char* pszFileName = "ELC on COM%u.log";
+			// open log file
+			char* pszLogFileName = (char*)CALLOC(ONEKB);
+			sprintf_s(pszLogFileName, ONEKB, "ELC on COM%u.log", MYPELC->port);
+			MYPELC->logHandle = CreateFile((LPCSTR)pszLogFileName,
+				FILE_GENERIC_WRITE,
+				FILE_SHARE_READ,
+				NULL,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				NULL);
+			if (NO_FILE == MYPELC->logHandle)
+			{
+				TCHAR szPath[MAX_PATH + 1];
+				char* pszLongLogFileName = (char*)CALLOC(ONEKB);
+				// search for Documents path
+				HRESULT hres = SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, (PWSTR*)&szPath);
+				if (S_OK == hres)
+				{
+					sprintf_s(pszLongLogFileName, ONEKB, "%s\\%s", szPath, pszLogFileName);
+					MYPELC->logHandle = CreateFile((LPCSTR)pszLongLogFileName,
+						FILE_GENERIC_WRITE,
+						FILE_SHARE_READ,
+						NULL,
+						OPEN_ALWAYS,
+						FILE_ATTRIBUTE_NORMAL,
+						NULL);
+				}
+				if (NO_FILE == MYPELC->logHandle)
+				{
+					// search for TEMP path
+					DWORD dw = GetTempPath(_countof(szPath), szPath);
+					if (0 != dw)
+					{
+						sprintf_s(pszLongLogFileName, ONEKB, "%s%s", szPath, pszLogFileName);
+						MYPELC->logHandle = CreateFile((LPCSTR)pszLongLogFileName,
+							FILE_GENERIC_WRITE,
+							FILE_SHARE_READ,
+							NULL,
+							OPEN_ALWAYS,
+							FILE_ATTRIBUTE_NORMAL,
+							NULL);
+					}
+					if (NO_FILE == MYPELC->logHandle)
+					{
+						// impossible to retrieve the TEMP folder
+					}
+				}
+				free(pszLongLogFileName);
+			}
+			free(pszLogFileName);
+			if (NO_FILE != MYPELC->logHandle)
+				LOGCRLF;
+		}
+	}
+	else
+	{
+		if (NO_FILE != MYPELC->logHandle)
+		{
+			CloseHandle(MYPELC->logHandle);
+			MYPELC->logHandle = NO_FILE;
+		}
+	}
+	MYPELC->fUseLog = f;
 }
 
 /// <summary>
@@ -1782,18 +1845,15 @@ DRIVERAPI void __stdcall ELCClose(ELC pelc)
 		SetCommState(MYPELC->handle, &MYPELC->dcbInitial);
 		SLEEPAFTERSETCOMMSTATE;
 		if (NO_FILE != MYPELC->logHandle)
-			CloseMyHandle(MYPELC->logHandle);
+			CloseHandle(MYPELC->logHandle);
 		MYPELC->logHandle = NO_FILE;
 		if (NO_FILE != MYPELC->handle)
-			CloseMyHandle(MYPELC->handle);
+			CloseHandle(MYPELC->handle);
 		MYPELC->handle = NO_FILE;
-		LOGONLY("close mutex");
-		if (NULL != MYPELC->mutexStopReading)
-			CloseHandle(MYPELC->mutexStopReading);
-		MYPELC->mutexStopReading = NULL;
-		if (NULL != MYPELC->eventInProgress)
-			CloseHandle(MYPELC->eventInProgress);
-		MYPELC->eventInProgress = NULL;
+		CloseMyHandle(&MYPELC->mutexInProgress);
+		CloseMyHandle(&MYPELC->stopReading);
+		CloseMyHandle(&MYPELC->startTimer);
+		CloseMyHandle(&MYPELC->processingIsOver);
 	}
 }
 
@@ -1828,7 +1888,7 @@ DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
 #define STATUS_CR3_NO_DOCUMENT		0x30
 #define STATUS_CR3_DOCUMENT			0x31
 
-	if (fOK = AllowReading(pelc))
+	if (fOK = SetInProgress(pelc))
 	{
 		if (fOK = SendOrder(pelc))
 		{
@@ -1839,8 +1899,12 @@ DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
 					*pfDocumentReadyToBeRead = STATUS_CR3_DOCUMENT == CR3;
 			}
 		}
-		ForbidReading(pelc);
+		ResetInProgress(pelc);
 	}
+	if (fOK)
+		LOG(COMPLETED_SUCCESSFULLY, true);
+	else
+		LOG(COMPLETED_WITH_ERROR, true);
 	return fOK;
 }
 
@@ -1874,7 +1938,8 @@ DRIVERAPI BOOL __stdcall ELCAbort(ELC pelc, BOOL* pfDocumentEjected)
 #define ABORT_CR2_OK					0x30
 #define ABORT_CR2_KO					0x31
 
-	if (fOK = AllowReading(pelc))
+	MYPFNC->elcResult = ELCResult::error;
+	if (fOK = SetInProgress(pelc))
 	{
 		if (fOK = SendOrder(pelc))
 		{
@@ -1882,11 +1947,24 @@ DRIVERAPI BOOL __stdcall ELCAbort(ELC pelc, BOOL* pfDocumentEjected)
 			{
 				SaveCR(pelc);
 				if (fOK = (ABORT_CR1_OK == CR1))
-					*pfDocumentEjected = ABORT_CR2_OK == CR2;
+				{
+					if (*pfDocumentEjected = ABORT_CR2_OK == CR2)
+					{
+						MYPFNC->elcResult = ELCResult::completed;
+						LOG(COMPLETED_SUCCESSFULLY, true);
+					}
+					else
+					{
+						MYPFNC->elcResult = ELCResult::completedWithError;
+						LOG(COMPLETED_WITH_ERROR, true);
+					}
+				}
 			}
 		}
-		ForbidReading(pelc);
+		ResetInProgress(pelc);
 	}
+	if (ELCResult::completed != MYPFNC->elcResult && ELCResult::completedWithError != MYPFNC->elcResult)
+		LOG("ERROR DURING PROCESSING", true);
 	return fOK;
 }
 
@@ -1905,27 +1983,21 @@ static BOOL StartAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyn
 	MYPELCSTRUCT;
 	BOOL fOK;
 
+	MYPFNC->elcResult = ELCResult::none;
+
 	// initialise sync environment
 	PrepareAsyncEnvironment(pelc, startTimerEvent, asyncOperationEndedEvent);
 
-	if (fOK = AllowReading(pelc))
+	// start timeout thread
+	if (fOK = StartAsyncResultThread(pelc, iTimer))
 	{
-		// start timeout thread
-		if (fOK = StartAsyncResultThread(pelc, iTimer))
+		// send read order
+		if (fOK = SendOrder(pelc))
 		{
-			// send read order
-			if (fOK = SendOrder(pelc))
+			// start thread waiting to receive answer
+			if (fOK = StartAsyncProcessingThread(pelc))
 			{
-				// start thread waiting to receive answer
-				if (fOK = StartAsyncProcessingThread(pelc))
-				{
-					// arrived here everything went right
-				}
-				else
-				{
-					// stop result thread
-					SetEvent(MYPELC->error);
-				}
+				// arrived here everything went right
 			}
 			else
 			{
@@ -1933,14 +2005,17 @@ static BOOL StartAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyn
 				SetEvent(MYPELC->error);
 			}
 		}
-
-		// release resources if an error has occurred
-		if (!fOK)
+		else
 		{
-			RazAsyncEnvironment(pelc);
-			RazInProgress(pelc);
-			ForbidReading(pelc);
+			// stop result thread
+			SetEvent(MYPELC->error);
 		}
+	}
+
+	// release resources if an error has occurred
+	if (!fOK)
+	{
+		ResetInProgress(pelc);
 	}
 	return fOK;
 }
@@ -1953,55 +2028,18 @@ static BOOL StartAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyn
 /// <param name="pfTimeout"></param>
 /// <param name="pfCancelled"></param>
 /// <returns><see </returns>
-DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer, BOOL* pfTimeout, BOOL* pfCancelled)
+DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer)
 {
-	*pfTimeout = *pfCancelled = false;
 	MYPELCSTRUCT;
-	if (IsInProgress(pelc, false))
-		return ELCResult::error;
-	HANDLE handles[] = { MYPELC->userEventCompleted, MYPELC->userEventCancelled, MYPELC->userEventTimeout, MYPELC->userEventError };
-	DWORD dw = WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, false, iTimer);
-	ForbidReading(pelc);
-	Sleep(10);
-	switch (dw)
-	{
-	case WAIT_FAILED:
-		MYPFNC->eventResult = ELCResult::error;
-		break;
-	case WAIT_TIMEOUT:
-		MYPFNC->eventResult = ELCResult::none;
-		break;
-	default:
-		int index = dw - WAIT_OBJECT_0;
-		switch (index)
-		{
-		case 0:
-			MYPFNC->eventResult = ELCResult::completed;
-			break;
-		case 1:
-			MYPFNC->eventResult = ELCResult::cancelled;
-			*pfCancelled = true;
-			break;
-		case 2:
-			MYPFNC->eventResult = ELCResult::timeout;
-			*pfTimeout = true;
-			break;
-		default:
-			MYPFNC->eventResult = ELCResult::error;
-			break;
-		}
-		if (ELCResult::completed != MYPFNC->eventResult)
-		{
-			Sleep(MYPELC->timerBeforeAbort);
-			BOOL f;
-			ELCAbort(pelc, &f);
-		}
-		break;
-	}
-	// arrived here all events can be closed
-	RazAsyncEnvironment(pelc);
-	RazInProgress(pelc);
-	return MYPFNC->eventResult;
+	//if (IsInProgress(pelc))
+	//{
+	DWORD dw = WaitForSingleObject(MYPELC->processingIsOver, iTimer);
+	if (WAIT_OBJECT_0 == dw)
+		return MYPFNC->elcResult;
+	else
+		return ELCResult::none;
+	//}
+	//return MYPFNC->elcResult;
 }
 
 /// <summary>
@@ -2020,7 +2058,7 @@ DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEve
 	//	*pfRead = *pfDocumentInside = false;
 
 		// are we already inside an async operation ?
-	if (IsInProgress(pelc, true))
+	if (!SetInProgress(pelc))
 		return false;
 
 	char* REQUEST = READ_REQUEST;
@@ -2049,18 +2087,18 @@ DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEve
 /// <param name="sizeChpnBuffer">Size of chpn buffer</param>
 /// <param name="fDocumentInside">True if the document is still inside after reading</param>
 /// <returns>True is successfull, false otherwise</returns>
-DRIVERAPI ELCResult __stdcall ELCReadResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentIsStillInside)
+DRIVERAPI ELCResult __stdcall ELCReadAsyncResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentIsStillInside)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
-	if (IsInProgress(pelc, true))
-		return ELCResult::none;
+	if (IsInProgress(pelc))
+		return MYPFNC->elcResult = ELCResult::none;
 	if (&MYPELC->read != MYPELC->pCurrentFnc)
-		return ELCResult::error;
-	if (ELCResult::completed != MYPFNC->eventResult)
-		return MYPFNC->eventResult;
+		return MYPFNC->elcResult = ELCResult::error;
+	if (ELCResult::completed != MYPFNC->elcResult)
+		return MYPFNC->elcResult;
 	if (0 == MYPFNC->dwReplyDataSize || NULL == MYPFNC->pReplyData)
-		return ELCResult::error;
+		return MYPFNC->elcResult = ELCResult::error;
 
 #define	READ_CR1_OK						0x31
 #define	READ_CR1_KO						0x34
@@ -2085,22 +2123,22 @@ DRIVERAPI ELCResult __stdcall ELCReadResult(ELC pelc, char* pchRawBuffer, int si
 		{
 			switch ((pchChpnBuffer)[i])
 			{
-			case 0x3A: // S1
-				(pchChpnBuffer)[i] = 'B';
-				break;
-			case 0x3B: // S2
-				break;
-			case 0x3C: // S3
-				(pchChpnBuffer)[i] = 'D';
-				break;
-			case 0x3D: // S4
-				break;
-			case 0x3E: // S5
-				(pchChpnBuffer)[i] = 'F';
-				break;
-			case 0x3F: // character failed to be read
-				(pchChpnBuffer)[i] = 'A';
-				break;
+				case 0x3A: // S1
+					(pchChpnBuffer)[i] = 'B';
+					break;
+				case 0x3B: // S2
+					break;
+				case 0x3C: // S3
+					(pchChpnBuffer)[i] = 'D';
+					break;
+				case 0x3D: // S4
+					break;
+				case 0x3E: // S5
+					(pchChpnBuffer)[i] = 'F';
+					break;
+				case 0x3F: // character failed to be read
+					(pchChpnBuffer)[i] = 'A';
+					break;
 			}
 		}
 	}
@@ -2110,10 +2148,12 @@ DRIVERAPI ELCResult __stdcall ELCReadResult(ELC pelc, char* pchRawBuffer, int si
 		if (READ_CR2_OK == CR2)
 		{
 			*pfDocumentIsStillInside = READ_CR3_DOCUMENT_INSIDE == CR3;
-			return MYPFNC->eventResult = ELCResult::completed;
+			LOG(COMPLETED_SUCCESSFULLY, true);
+			return MYPFNC->elcResult = ELCResult::completed;
 		}
 	}
-	return MYPFNC->eventResult = ELCResult::completedWithError;
+	LOG(COMPLETED_WITH_ERROR, true);
+	return MYPFNC->elcResult = ELCResult::completedWithError;
 }
 
 /// <summary>
@@ -2132,7 +2172,7 @@ DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchB
 	BOOL fOK = false;
 
 	// are we already inside an async operation ?
-	if (IsInProgress(pelc, true))
+	if (!SetInProgress(pelc))
 		return false;
 
 	char* pb;
@@ -2189,16 +2229,16 @@ DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchB
 /// <param name="pfSuccess">true if printing went successfully, false otherwise</param>
 /// <param name="iTimer">Timer to wait for completion</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI ELCResult __stdcall ELCWriteResult(ELC pelc)
+DRIVERAPI ELCResult __stdcall ELCWriteAsyncResult(ELC pelc)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
-	if (IsInProgress(pelc, true))
-		return ELCResult::none;
+	if (IsInProgress(pelc))
+		return MYPFNC->elcResult = ELCResult::none;
 	if (&MYPELC->write != MYPELC->pCurrentFnc)
-		return ELCResult::error;
-	if (ELCResult::completed != MYPFNC->eventResult)
-		return MYPFNC->eventResult;
+		return MYPFNC->elcResult = ELCResult::error;
+	if (ELCResult::completed != MYPFNC->elcResult)
+		return MYPFNC->elcResult;
 
 #define WRITE_CR1_OK					0x31
 #define WRITE_CR1_KO					0x34
@@ -2210,10 +2250,12 @@ DRIVERAPI ELCResult __stdcall ELCWriteResult(ELC pelc)
 	{
 		if (WRITE_CR2_OK == CR2)
 		{
-			return MYPFNC->eventResult = ELCResult::completed;
+			LOG(COMPLETED_SUCCESSFULLY, true);
+			return MYPFNC->elcResult = ELCResult::completed;
 		}
 	}
-	return MYPFNC->eventResult = ELCResult::completedWithError;
+	LOG(COMPLETED_WITH_ERROR, true);
+	return MYPFNC->elcResult = ELCResult::completedWithError;
 }
 
 /// <summary>
@@ -2229,17 +2271,21 @@ DRIVERAPI ELCResult __stdcall ELCWriteResult(ELC pelc)
 /// <param name="pfTimeout"></param>
 /// <param name="pfCancelled"></param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside, BOOL* pfTimeout, BOOL* pfCancelled)
+DRIVERAPI ELCResult __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside)
 {
 	MYPELCSTRUCT;
-	*pfTimeout = true;
 	if (ELCReadAsync(pelc, iTimer, startTimerEvent, NULL))
-		switch (ELCWaitAsync(pelc, 0, pfTimeout, pfCancelled))
+	{
+		ELCResult res;
+		switch (res = ELCWaitAsync(pelc, INFINITE))
 		{
-		case ELCResult::completed:
-			return ELCResult::completed == ELCReadResult(pelc, pchRawBuffer, sizeRawBuffer, pchChpnBuffer, sizeChpnBuffer, pfDocumentInside);
+			case ELCResult::completed:
+				return ELCReadAsyncResult(pelc, pchRawBuffer, sizeRawBuffer, pchChpnBuffer, sizeChpnBuffer, pfDocumentInside);
+			default:
+				return res;
 		}
-	return false;
+	}
+	return ELCResult::error;
 }
 
 /// <summary>
@@ -2252,16 +2298,21 @@ DRIVERAPI BOOL __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, c
 /// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
 /// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent, BOOL* pfTimeout, BOOL* pfCancelled)
+DRIVERAPI ELCResult __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent)
 {
 	MYPELCSTRUCT;
 	if (ELCWriteAsync(pelc, pszData, pchBuffer, sizeBuffer, iTimer, startTimerEvent, NULL))
-		switch (ELCWaitAsync(pelc, 0, pfTimeout, pfCancelled))
+	{
+		ELCResult res;
+		switch (res = ELCWaitAsync(pelc, INFINITE))
 		{
-		case ELCResult::completed:
-			return ELCResult::completed == ELCWriteResult(pelc);
+			case ELCResult::completed:
+				return ELCWriteAsyncResult(pelc);
+			default:
+				return res;
 		}
-	return false;
+	}
+	return ELCResult::error;
 }
 
 /// <summary>
@@ -2274,7 +2325,7 @@ DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc)
 	MYPELCSTRUCT;
 	BOOL fOK;
 	DWORD dwError;
-	if (fOK = AllowReading(pelc))
+	if (fOK = SetInProgress(pelc))
 	{
 		if (fOK = SendENQ(pelc, &dwError))
 		{
@@ -2289,7 +2340,7 @@ DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc)
 			}
 			SendEOT(pelc, &dwError);
 		}
-		ForbidReading(pelc);
+		ResetInProgress(pelc);
 	}
 	return fOK;
 }
@@ -2341,7 +2392,7 @@ DRIVERAPI DWORD __stdcall ELCSpeed(ELC pelc, DWORD BaudRate)
 DRIVERAPI BOOL __stdcall ELCCancelAsync(ELC pelc)
 {
 	MYPELCSTRUCT;
-	if (IsInProgress(pelc, false))
+	if (IsInProgress(pelc))
 	{
 		return SetEvent(MYPELC->cancelled);
 	}
@@ -2362,27 +2413,27 @@ DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 		return;
 	switch (timer)
 	{
-	case ELCTimer::T1:
-		pelcstruct->T1 = value;
-		break;
-	case ELCTimer::T2:
-		pelcstruct->T2 = value;
-		break;
-	case ELCTimer::TA:
-		pelcstruct->TA = value;
-		break;
-	case ELCTimer::TR:
-		pelcstruct->TR = value;
-		break;
-	case ELCTimer::TRA:
-		pelcstruct->TRA = value;
-		break;
-	case ELCTimer::TD:
-		pelcstruct->TD = value;
-		break;
-	case ELCTimer::beforeAbort:
-		pelcstruct->timerBeforeAbort = value;
-		break;
+		case ELCTimer::T1:
+			pelcstruct->T1 = value;
+			break;
+		case ELCTimer::T2:
+			pelcstruct->T2 = value;
+			break;
+		case ELCTimer::TA:
+			pelcstruct->TA = value;
+			break;
+		case ELCTimer::TR:
+			pelcstruct->TR = value;
+			break;
+		case ELCTimer::TRA:
+			pelcstruct->TRA = value;
+			break;
+		case ELCTimer::TD:
+			pelcstruct->TD = value;
+			break;
+		case ELCTimer::beforeAbort:
+			pelcstruct->timerBeforeAbort = value;
+			break;
 	}
 }
 
@@ -2393,7 +2444,7 @@ DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 /// <returns>True if within an async operation, false otherwise</returns>
 DRIVERAPI  BOOL __stdcall  ELCIsInProgress(ELC pelc)
 {
-	return IsInProgress(pelc, false);
+	return IsInProgress(pelc);
 }
 
 /// <summary>
@@ -2404,7 +2455,9 @@ DRIVERAPI  BOOL __stdcall  ELCIsInProgress(ELC pelc)
 DRIVERAPI  ELCResult __stdcall  ELCLastAsyncResult(ELC pelc)
 {
 	MYPELCSTRUCT;
-	return MYPFNC->eventResult;
+	if (NULL != MYPFNC)
+		return MYPFNC->elcResult;
+	return ELCResult::none;
 }
 
 #pragma endregion

@@ -183,7 +183,7 @@ int main()
 					}
 				}
 				else
-					if (fOpen = ELCOpen(elc))
+					if (fOpen = ELCOpen(elc, true))
 					{
 						if (TestMenuEntry((char*)"t", c))
 						{
@@ -211,9 +211,12 @@ int main()
 						else if (TestMenuEntry((char*)"r", c))
 						{
 							char raw[ONEKB], chpn[ONEKB];
-							BOOL fDocumentIsStillInside, fTimeout, fCancelled;
+							BOOL fDocumentIsStillInside;
 							HANDLE timerStarted = CreateEvent(NULL, false, false, NULL);
-							if (ELCRead(elc, 10, timerStarted, raw, _countof(raw), chpn, _countof(chpn), &fDocumentIsStillInside, &fTimeout, &fCancelled))
+							if (ELCResult::completed == ELCRead(elc,
+								10,
+								//INFINITE,
+								timerStarted, raw, _countof(raw), chpn, _countof(chpn), &fDocumentIsStillInside))
 							{
 								char dummy[ONEKB * 2];
 								sprintf_s(dummy, sizeof(dummy), "CMC7: %s", chpn);
@@ -222,9 +225,9 @@ int main()
 							}
 							else
 							{
-								if (fTimeout)
+								if (ELCResult::timeout == ELCLastAsyncResult(elc))
 									DisplayMessage(elc, "TIMEOUT");
-								if (fCancelled)
+								if (ELCResult::cancelled == ELCLastAsyncResult(elc))
 									DisplayMessage(elc, "CANCELLED BY USER");
 								DisplayFailed(elc);
 							}
@@ -232,11 +235,13 @@ int main()
 						}
 						else if (TestMenuEntry((char*)"w", c))
 						{
-							BOOL fTimeout, fCancelled;
 							char printed[ONEKB];
 							const char* psz = "azertyuiopqsdfghjklmwxcvbnAZERTYUIOPQSDFGHJKLMWXCVBN12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
 							HANDLE timerStarted = CreateEvent(NULL, false, false, NULL);
-							if (ELCWrite(elc, psz, printed, _countof(printed), 10, timerStarted, &fTimeout, &fCancelled))
+							if (ELCResult::completed == ELCWrite(elc, psz, printed, _countof(printed),
+								20,
+								//INFINITE,
+								timerStarted))
 							{
 								char buffer[ONEKB * 2];
 								DisplayResult(elc, 0x31, "Printing OK");
@@ -247,9 +252,9 @@ int main()
 							}
 							else
 							{
-								if (fTimeout)
+								if (ELCResult::timeout == ELCLastAsyncResult(elc))
 									DisplayMessage(elc, "TIMEOUT");
-								if (fCancelled)
+								if (ELCResult::cancelled == ELCLastAsyncResult(elc))
 									DisplayMessage(elc, "CANCELLED BY USER");
 								DisplayFailed(elc);
 							}

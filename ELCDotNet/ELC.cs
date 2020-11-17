@@ -99,13 +99,15 @@ namespace ELCDotNet
 		/// <summary>
 		/// True if the last operation timed out
 		/// </summary>
-		public bool Timeout { get => _timeout; }
-		private bool _timeout = false;
+		public bool Timeout { get => ELCi2200.ELCResult.timeout == LastAsyncResult; }
 		/// <summary>
 		/// True if the last operation was cancelled by the user
 		/// </summary>
-		public bool Cancelled { get => _cancelled; }
-		private bool _cancelled = false;
+		public bool Cancelled { get => ELCi2200.ELCResult.cancelled == LastAsyncResult; }
+		/// <summary>
+		/// True if the last operation was cancelled by the user
+		/// </summary>
+		public bool CompletedWithError { get => ELCi2200.ELCResult.completedWithError == LastAsyncResult; }
 		/// <summary>
 		/// Event used to warn the calling application it can start its own waiting timer
 		/// </summary>
@@ -145,8 +147,8 @@ namespace ELCDotNet
 		/// </summary>
 		private CThread thread = null;
 		private ManualResetEvent stopThreadEvent = null;
-		private ManualResetEvent startUserTimerEvent = null;
-		private ManualResetEvent processHasEndedEvent = null;
+		private AutoResetEvent startUserTimerEvent = null;
+		private AutoResetEvent processHasEndedEvent = null;
 		#endregion
 
 		#region public methods
@@ -154,13 +156,14 @@ namespace ELCDotNet
 		/// Open the ELC using a known COM port
 		/// </summary>
 		/// <param name="port">COM port to use</param>
+		/// <param name="useLog">Indicates whether a log file must be opened (and an output created)</param>
 		/// <returns>True if opened, false otherwise</returns>
-		public bool Open(int port)
+		public bool Open(int port, bool useLog = true)
 		{
 			if (ELCi2200.NO_COM_PORT != port)
 			{
 				ELCi2200.ELCSetPort(pelc, port);
-				Opened = ELCi2200.ELCOpen(pelc);
+				Opened = ELCi2200.ELCOpen(pelc, useLog);
 				return Opened;
 			}
 			return false;
@@ -169,18 +172,20 @@ namespace ELCDotNet
 		/// Open the ELC using a USB device driver
 		/// </summary>
 		/// <param name="driver">COM port to use</param>
+		/// <param name="useLog">Indicates whether a log file must be opened (and an output created)</param>
 		/// <returns>True if opened, false otherwise</returns>
-		public bool Open(string driver)
+		public bool Open(string driver, bool useLog = true)
 		{
 			int port = ELCi2200.ELCGetUSBComPort(driver);
-			return Open(port);
+			return Open(port, useLog);
 		}
 		/// <summary>
 		/// Try to open using a list a USB device drivers
 		/// </summary>
 		/// <param name="availableDrivers">Name of the JSON file containing the drivers (<see cref="USBDriver"/> for each item inside a <see cref="USBDrivers"/> collection)</param>
+		/// <param name="useLog">Indicates whether a log file must be opened (and an output created)</param>
 		/// <returns>True if opened, false otherwise</returns>
-		public bool OpenWithDrivers(string availableDrivers)
+		public bool OpenWithDrivers(string availableDrivers, bool useLog = true)
 		{
 			CJson<USBDrivers> json = new CJson<USBDrivers>();
 			// try to open the drivers file
@@ -190,7 +195,7 @@ namespace ELCDotNet
 			{
 				foreach (USBDriver driver in drivers)
 				{
-					if (Open(driver.DriverName))
+					if (Open(driver.DriverName, useLog))
 						return true;
 				}
 			}
@@ -253,7 +258,8 @@ namespace ELCDotNet
 			{
 				StringBuilder rawx = new StringBuilder(1024);
 				StringBuilder chpnx = new StringBuilder(1024);
-				if (ELCi2200.ELCRead(pelc, timer, IntPtr.Zero, rawx, rawx.Capacity, chpnx, chpnx.Capacity, ref documentIsInside, ref _timeout, ref _cancelled))
+				ELCi2200.ELCResult res = ELCi2200.ELCRead(pelc, timer, IntPtr.Zero, rawx, rawx.Capacity, chpnx, chpnx.Capacity, ref documentIsInside);
+				if (ELCi2200.ELCResult.completed == LastAsyncResult)
 				{
 					raw = rawx.ToString();
 					chpnCompatible = chpnx.ToString();
@@ -281,17 +287,17 @@ namespace ELCDotNet
 		/// Get write async result
 		/// </summary>
 		/// <returns>True if result has been retrieved, false otherwise</returns>
-		public bool ReadAsyncResult(ref string raw, ref string chpnCompatible, ref bool documentIsInside)
+		public ELCi2200.ELCResult ReadAsyncResult(ref string raw, ref string chpnCompatible, ref bool documentIsInside)
 		{
 			StringBuilder rawx = new StringBuilder(1024);
 			StringBuilder chpnx = new StringBuilder(1024);
-			if (ELCi2200.ELCReadResult(pelc, rawx, rawx.Capacity, chpnx, chpnx.Capacity, ref documentIsInside))
+			ELCi2200.ELCResult res = ELCi2200.ELCReadAsyncResult(pelc, rawx, rawx.Capacity, chpnx, chpnx.Capacity, ref documentIsInside);
+			if (ELCi2200.ELCResult.completed == LastAsyncResult)
 			{
 				raw = rawx.ToString();
 				chpnCompatible = chpnx.ToString();
-				return true;
 			}
-			return false;
+			return res;
 		}
 		/// <summary>
 		/// Read a check
@@ -324,7 +330,8 @@ namespace ELCDotNet
 				string s = Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(text));
 				StringBuilder toprintx = new StringBuilder(s);
 				StringBuilder printedx = new StringBuilder(1024);
-				if (ELCi2200.ELCWrite(pelc, toprintx, printedx, printedx.Capacity, timer, IntPtr.Zero, ref _timeout, ref _cancelled))
+				ELCi2200.ELCResult res = ELCi2200.ELCWrite(pelc, toprintx, printedx, printedx.Capacity, timer, IntPtr.Zero);
+				if (ELCi2200.ELCResult.completed == LastAsyncResult)
 				{
 					text = printedx.ToString();
 					return true;
@@ -376,9 +383,9 @@ namespace ELCDotNet
 		/// Get write async result
 		/// </summary>
 		/// <returns>True if result has been retrieved, false otherwise</returns>
-		public bool WriteAsyncResult()
+		public ELCi2200.ELCResult WriteAsyncResult()
 		{
-			return ELCi2200.ELCWriteResult(pelc);
+			return ELCi2200.ELCWriteAsyncResult(pelc);
 		}
 		/// <summary>
 		/// Wait for an asynchronous operation terminates (or not) on the ELC
@@ -388,8 +395,18 @@ namespace ELCDotNet
 		public ELCi2200.ELCResult WaitAsync(int timer = ELCi2200.NO_TIMER)
 		{
 			if (Opened && ELCi2200.ELCIsInProgress(pelc))
-				return ELCi2200.ELCWaitAsync(pelc, timer, ref _timeout, ref _cancelled);
+				return ELCi2200.ELCWaitAsync(pelc, timer);
 			return ELCi2200.ELCResult.error;
+		}
+		/// <summary>
+		/// Cancel the current asynchronous operation
+		/// </summary>
+		/// <returns></returns>
+		public bool CancelAsync()
+		{
+			if (Opened && ELCi2200.ELCIsInProgress(pelc))
+				return ELCi2200.ELCCancelAsync(pelc);
+			return false;
 		}
 		#endregion
 
@@ -451,8 +468,8 @@ namespace ELCDotNet
 			AsyncStartUserTimerEvent.Reset();
 			AsyncProcessHasEndedEvent.Reset();
 			stopThreadEvent = new ManualResetEvent(false);
-			startUserTimerEvent = new ManualResetEvent(false);
-			processHasEndedEvent = new ManualResetEvent(false);
+			startUserTimerEvent = new AutoResetEvent(false);
+			processHasEndedEvent = new AutoResetEvent(false);
 			if (!thread.Start(AsyncThread))
 			{
 				stopThreadEvent = null;

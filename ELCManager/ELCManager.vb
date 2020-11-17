@@ -5,8 +5,11 @@ Imports COMMON
 Public Class mainForm
 
 	Private pelc As IntPtr
-	Private ELC As New ELC()
+	Private Elc As New ELC()
 	Private Const JSON_FILE_NAME As String = "elcmanager.settings.json"
+	Private Const WM_START_TIMER = Win32.WM_USER + 5
+	Private Const WM_PROCESS_HAS_ENDED = Win32.WM_USER + 6
+	Private wait As FWait
 
 	Private Sub mainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 		For i As PrintType = PrintType._begin + 1 To PrintType._end - 1
@@ -67,22 +70,22 @@ Public Class mainForm
 	End Sub
 
 	Private Sub SetOpenButton()
-		If ELC.Opened Then
+		If Elc.Opened Then
 			pbOpen.Text = "Fermer l'ELC"
-			efPort.Text = "Connecté à COM" & ELC.Port.ToString("0")
+			efPort.Text = "Connecté à COM" & Elc.Port.ToString("0")
 		Else
 			pbOpen.Text = "Ouvrir l'ELC"
 			efPort.Text = "Fermé"
 		End If
-		TableLayoutPanelFunctions.Enabled = ELC.Opened
+		TableLayoutPanelFunctions.Enabled = Elc.Opened
 	End Sub
 
 	Private Sub pbOpen_Click(sender As Object, e As EventArgs) Handles pbOpen.Click
 		panelMain.Enabled = False
-		If ELC.Opened Then
-			ELC.Close()
+		If Elc.Opened Then
+			Elc.Close()
 		Else
-			ELC.OpenWithDrivers("elcmanager.drivers.json")
+			Elc.OpenWithDrivers("elcmanager.drivers.json")
 		End If
 		RAZResults()
 		SetOpenButton()
@@ -93,25 +96,44 @@ Public Class mainForm
 		panelMain.Enabled = False
 		RAZResults()
 		Dim docIsInside As Boolean
-		stateres.Text = ELC.Status(docIsInside).ToString
+		stateres.Text = Elc.Status(docIsInside).ToString
 		cbStateCheckInside.Checked = docIsInside
 		panelMain.Enabled = True
 	End Sub
 
-	Private Sub pbRead_Click(sender As Object, e As EventArgs) Handles pbRead.Click
+	Private Sub pbRead_Click(sender As Object, e As EventArgs) Handles pbRead.Click, pbReadAsync.Click
 		panelMain.Enabled = False
 		RAZResults()
 		Dim docIsInside As Boolean
 		Dim raw As String = Nothing, chpn As String = Nothing
 		cbReadTimeout.Checked = False
 		cbReadCancelled.Checked = False
-		Dim f As Boolean = ELC.Read(efRaw.Text, efCHPN.Text, docIsInside, udReadTimer.Value)
-		readres.Text = f.ToString
-		If f Then
+		Dim f As ELCi2200.ELCResult
+		'call requested function
+		If sender Is pbRead Then
+			'synchronous processing
+			Elc.Read(efRaw.Text, efCHPN.Text, docIsInside, udReadTimer.Value)
+			f = Elc.LastAsyncResult
+		Else
+			'asynchronous processing
+			PrepareAsync()
+			If Elc.ReadAsync(udReadTimer.Value) Then
+				If DialogResult.OK = wait.ShowDialog() Then
+					f = Elc.ReadAsyncResult(raw, chpn, docIsInside)
+				Else
+					f = Elc.LastAsyncResult
+					MsgBox("L'opération n'est pas complète: " & f.ToString)
+				End If
+			End If
+			wait = Nothing
+		End If
+		'display result
+		readres.Text = (ELCi2200.ELCResult.completed = f).ToString
+		If ELCi2200.ELCResult.completed = f Then
 			cbReadCheckInside.Checked = docIsInside
 		Else
-			cbReadTimeout.Checked = ELC.Timeout
-			cbReadCancelled.Checked = ELC.Cancelled
+			cbReadTimeout.Checked = Elc.Timeout
+			cbReadCancelled.Checked = Elc.Cancelled
 		End If
 		panelMain.Enabled = True
 	End Sub
@@ -122,13 +144,30 @@ Public Class mainForm
 		cbWriteExTimeout.Checked = False
 		cbWriteExCancelled.Checked = False
 		Dim s As String = efWrite.Text
-		Dim f As Boolean = ELC.WriteEx(s, udWriteExTimer.Value)
-		writeexres.Text = f.ToString
-		If f Then
+		Dim f As ELCi2200.ELCResult
+		If sender Is pbWrite Then
+			'asynchronous processing
+			Elc.WriteEx(s, udWriteExTimer.Value)
+			f = Elc.LastAsyncResult
+		Else
+			'asynchronous processing
+			PrepareAsync()
+			If Elc.WriteAsyncEx(s, udWriteExTimer.Value) Then
+				If DialogResult.OK = wait.ShowDialog() Then
+					f = Elc.WriteAsyncResult()
+				Else
+					f = Elc.LastAsyncResult
+					MsgBox("L'opération n'est pas complète: " & f.ToString)
+				End If
+			End If
+			wait = Nothing
+		End If
+		writeexres.Text = (ELCi2200.ELCResult.completed = f).ToString
+		If ELCi2200.ELCResult.completed = f Then
 			Label15.Text = s
 		Else
-			cbWriteExTimeout.Checked = ELC.Timeout
-			cbWriteExCancelled.Checked = ELC.Cancelled
+			cbWriteExTimeout.Checked = Elc.Timeout
+			cbWriteExCancelled.Checked = Elc.Cancelled
 		End If
 		panelMain.Enabled = True
 	End Sub
@@ -153,7 +192,7 @@ Public Class mainForm
 		panelMain.Enabled = False
 		RAZResults()
 		Dim docHasBeenEjected As Boolean
-		abortres.Text = ELC.Abort(docHasBeenEjected).ToString
+		abortres.Text = Elc.Abort(docHasBeenEjected).ToString
 		cbAbortCheckEjected.Checked = docHasBeenEjected
 		panelMain.Enabled = True
 	End Sub
@@ -174,13 +213,30 @@ Public Class mainForm
 		cbWriteTimeout.Checked = False
 		cbWriteCancelled.Checked = False
 		Dim printed As String = Nothing
-		Dim f As Boolean = ELC.Write(o, printed, udWriteTimer.Value)
-		writeres.Text = f.ToString
-		If f Then
+		Dim f As ELCi2200.ELCResult
+		If sender Is pbWriteCheck Then
+			'asynchronous processing
+			Elc.Write(o, printed, udWriteTimer.Value)
+			f = Elc.LastAsyncResult
+		Else
+			'asynchronous processing
+			PrepareAsync()
+			If Elc.WriteAsync(o, printed, udWriteTimer.Value) Then
+				If DialogResult.OK = wait.ShowDialog() Then
+					f = Elc.WriteAsyncResult()
+				Else
+					f = Elc.LastAsyncResult
+					MsgBox("L'opération n'est pas complète: " & f.ToString)
+				End If
+			End If
+			wait = Nothing
+		End If
+		writeres.Text = (ELCi2200.ELCResult.completed = f).ToString
+		If ELCi2200.ELCResult.completed = f Then
 			Label14.Text = printed
 		Else
-			cbWriteTimeout.Checked = ELC.Timeout
-			cbWriteCancelled.Checked = ELC.Cancelled
+			cbWriteTimeout.Checked = Elc.Timeout
+			cbWriteCancelled.Checked = Elc.Cancelled
 		End If
 		panelMain.Enabled = True
 	End Sub
@@ -197,4 +253,10 @@ Public Class mainForm
 	Private Sub mainForm_FormClosing(sender As Object, e As FormClosingEventArgs) Handles MyBase.FormClosing
 		WriteSettings()
 	End Sub
+
+	Private Sub PrepareAsync()
+		wait = New FWait(Elc)
+		Elc.WindowToWarn = wait.Handle
+	End Sub
+
 End Class

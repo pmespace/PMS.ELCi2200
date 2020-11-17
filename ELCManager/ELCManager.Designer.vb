@@ -50,7 +50,6 @@ Partial Class mainForm
 		Me.Label10 = New System.Windows.Forms.Label()
 		Me.efSeal = New System.Windows.Forms.TextBox()
 		Me.writeres = New System.Windows.Forms.TextBox()
-		Me.pbWriteCheck = New System.Windows.Forms.Button()
 		Me.TableLayoutPanel6 = New System.Windows.Forms.TableLayoutPanel()
 		Me.cbAbortCheckEjected = New System.Windows.Forms.CheckBox()
 		Me.abortres = New System.Windows.Forms.TextBox()
@@ -77,12 +76,19 @@ Partial Class mainForm
 		Me.cbReadCancelled = New System.Windows.Forms.CheckBox()
 		Me.Label1 = New System.Windows.Forms.Label()
 		Me.udReadTimer = New System.Windows.Forms.NumericUpDown()
-		Me.pbRead = New System.Windows.Forms.Button()
 		Me.pbState = New System.Windows.Forms.Button()
 		Me.TableLayoutPanel4 = New System.Windows.Forms.TableLayoutPanel()
 		Me.cbStateCheckInside = New System.Windows.Forms.CheckBox()
-		Me.pbWrite = New System.Windows.Forms.Button()
 		Me.stateres = New System.Windows.Forms.TextBox()
+		Me.TableLayoutPanel1 = New System.Windows.Forms.TableLayoutPanel()
+		Me.pbReadAsync = New System.Windows.Forms.Button()
+		Me.pbRead = New System.Windows.Forms.Button()
+		Me.TableLayoutPanel11 = New System.Windows.Forms.TableLayoutPanel()
+		Me.pbWriteAsync = New System.Windows.Forms.Button()
+		Me.pbWrite = New System.Windows.Forms.Button()
+		Me.TableLayoutPanel12 = New System.Windows.Forms.TableLayoutPanel()
+		Me.pbWriteCheck = New System.Windows.Forms.Button()
+		Me.pbWriteCheckAsync = New System.Windows.Forms.Button()
 		Me.panelMain.SuspendLayout()
 		Me.TableLayoutPanel2.SuspendLayout()
 		Me.TableLayoutPanelFunctions.SuspendLayout()
@@ -100,6 +106,9 @@ Partial Class mainForm
 		Me.TableLayoutPanel8.SuspendLayout()
 		CType(Me.udReadTimer, System.ComponentModel.ISupportInitialize).BeginInit()
 		Me.TableLayoutPanel4.SuspendLayout()
+		Me.TableLayoutPanel1.SuspendLayout()
+		Me.TableLayoutPanel11.SuspendLayout()
+		Me.TableLayoutPanel12.SuspendLayout()
 		Me.SuspendLayout()
 		'
 		'panelMain
@@ -118,7 +127,7 @@ Partial Class mainForm
 		Me.panelMain.RowCount = 2
 		Me.panelMain.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.panelMain.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.panelMain.Size = New System.Drawing.Size(949, 324)
+		Me.panelMain.Size = New System.Drawing.Size(949, 327)
 		Me.panelMain.TabIndex = 0
 		'
 		'pbOpen
@@ -174,7 +183,6 @@ Partial Class mainForm
 		Me.TableLayoutPanelFunctions.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel7, 2, 3)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.writeres, 1, 3)
-		Me.TableLayoutPanelFunctions.Controls.Add(Me.pbWriteCheck, 0, 3)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel6, 2, 4)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.abortres, 1, 4)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.writeexres, 1, 2)
@@ -182,11 +190,12 @@ Partial Class mainForm
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.pbAbort, 0, 4)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel5, 2, 2)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel3, 2, 1)
-		Me.TableLayoutPanelFunctions.Controls.Add(Me.pbRead, 0, 1)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.pbState, 0, 0)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel4, 2, 0)
-		Me.TableLayoutPanelFunctions.Controls.Add(Me.pbWrite, 0, 2)
 		Me.TableLayoutPanelFunctions.Controls.Add(Me.stateres, 1, 0)
+		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel1, 0, 1)
+		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel11, 0, 2)
+		Me.TableLayoutPanelFunctions.Controls.Add(Me.TableLayoutPanel12, 0, 3)
 		Me.TableLayoutPanelFunctions.Location = New System.Drawing.Point(3, 35)
 		Me.TableLayoutPanelFunctions.Name = "TableLayoutPanelFunctions"
 		Me.TableLayoutPanelFunctions.RowCount = 6
@@ -196,7 +205,7 @@ Partial Class mainForm
 		Me.TableLayoutPanelFunctions.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanelFunctions.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanelFunctions.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.TableLayoutPanelFunctions.Size = New System.Drawing.Size(943, 286)
+		Me.TableLayoutPanelFunctions.Size = New System.Drawing.Size(943, 289)
 		Me.TableLayoutPanelFunctions.TabIndex = 2
 		'
 		'TableLayoutPanel7
@@ -226,13 +235,13 @@ Partial Class mainForm
 		Me.TableLayoutPanel7.Controls.Add(Me.Label9, 0, 1)
 		Me.TableLayoutPanel7.Controls.Add(Me.cboxType, 1, 1)
 		Me.TableLayoutPanel7.Controls.Add(Me.panelRC, 2, 1)
-		Me.TableLayoutPanel7.Location = New System.Drawing.Point(183, 160)
+		Me.TableLayoutPanel7.Location = New System.Drawing.Point(189, 160)
 		Me.TableLayoutPanel7.Name = "TableLayoutPanel7"
 		Me.TableLayoutPanel7.RowCount = 3
 		Me.TableLayoutPanel7.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanel7.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanel7.RowStyles.Add(New System.Windows.Forms.RowStyle())
-		Me.TableLayoutPanel7.Size = New System.Drawing.Size(757, 90)
+		Me.TableLayoutPanel7.Size = New System.Drawing.Size(751, 90)
 		Me.TableLayoutPanel7.TabIndex = 11
 		'
 		'TableLayoutPanel10
@@ -258,7 +267,7 @@ Partial Class mainForm
 		Me.TableLayoutPanel10.Name = "TableLayoutPanel10"
 		Me.TableLayoutPanel10.RowCount = 1
 		Me.TableLayoutPanel10.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.TableLayoutPanel10.Size = New System.Drawing.Size(751, 26)
+		Me.TableLayoutPanel10.Size = New System.Drawing.Size(745, 26)
 		Me.TableLayoutPanel10.TabIndex = 9
 		'
 		'cbWriteTimeout
@@ -287,7 +296,7 @@ Partial Class mainForm
 		'
 		Me.Label13.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label13.AutoSize = True
-		Me.Label13.Location = New System.Drawing.Point(661, 6)
+		Me.Label13.Location = New System.Drawing.Point(655, 6)
 		Me.Label13.Name = "Label13"
 		Me.Label13.Size = New System.Drawing.Size(36, 13)
 		Me.Label13.TabIndex = 4
@@ -296,7 +305,7 @@ Partial Class mainForm
 		'udWriteTimer
 		'
 		Me.udWriteTimer.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.udWriteTimer.Location = New System.Drawing.Point(703, 3)
+		Me.udWriteTimer.Location = New System.Drawing.Point(697, 3)
 		Me.udWriteTimer.Maximum = New Decimal(New Integer() {30, 0, 0, 0})
 		Me.udWriteTimer.Minimum = New Decimal(New Integer() {5, 0, 0, 0})
 		Me.udWriteTimer.Name = "udWriteTimer"
@@ -312,7 +321,7 @@ Partial Class mainForm
 		Me.Label14.ForeColor = System.Drawing.Color.FromArgb(CType(CType(192, Byte), Integer), CType(CType(0, Byte), Integer), CType(CType(0, Byte), Integer))
 		Me.Label14.Location = New System.Drawing.Point(144, 7)
 		Me.Label14.Name = "Label14"
-		Me.Label14.Size = New System.Drawing.Size(511, 12)
+		Me.Label14.Size = New System.Drawing.Size(505, 12)
 		Me.Label14.TabIndex = 6
 		Me.Label14.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
 		'
@@ -321,7 +330,7 @@ Partial Class mainForm
 		Me.efName.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
 		Me.efName.Location = New System.Drawing.Point(117, 3)
 		Me.efName.Name = "efName"
-		Me.efName.Size = New System.Drawing.Size(160, 20)
+		Me.efName.Size = New System.Drawing.Size(158, 20)
 		Me.efName.TabIndex = 0
 		'
 		'Label2
@@ -338,7 +347,7 @@ Partial Class mainForm
 		'
 		Me.Label3.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label3.AutoSize = True
-		Me.Label3.Location = New System.Drawing.Point(283, 6)
+		Me.Label3.Location = New System.Drawing.Point(281, 6)
 		Me.Label3.Name = "Label3"
 		Me.Label3.Size = New System.Drawing.Size(124, 13)
 		Me.Label3.TabIndex = 2
@@ -347,16 +356,16 @@ Partial Class mainForm
 		'efLocation
 		'
 		Me.efLocation.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.efLocation.Location = New System.Drawing.Point(413, 3)
+		Me.efLocation.Location = New System.Drawing.Point(411, 3)
 		Me.efLocation.Name = "efLocation"
-		Me.efLocation.Size = New System.Drawing.Size(160, 20)
+		Me.efLocation.Size = New System.Drawing.Size(158, 20)
 		Me.efLocation.TabIndex = 1
 		'
 		'Label7
 		'
 		Me.Label7.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label7.AutoSize = True
-		Me.Label7.Location = New System.Drawing.Point(620, 6)
+		Me.Label7.Location = New System.Drawing.Point(616, 6)
 		Me.Label7.Name = "Label7"
 		Me.Label7.Size = New System.Drawing.Size(49, 13)
 		Me.Label7.TabIndex = 4
@@ -365,17 +374,17 @@ Partial Class mainForm
 		'udAmount
 		'
 		Me.udAmount.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.udAmount.Location = New System.Drawing.Point(675, 3)
+		Me.udAmount.Location = New System.Drawing.Point(671, 3)
 		Me.udAmount.Maximum = New Decimal(New Integer() {10000000, 0, 0, 0})
 		Me.udAmount.Name = "udAmount"
-		Me.udAmount.Size = New System.Drawing.Size(79, 20)
+		Me.udAmount.Size = New System.Drawing.Size(77, 20)
 		Me.udAmount.TabIndex = 2
 		'
 		'Label8
 		'
 		Me.Label8.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label8.AutoSize = True
-		Me.Label8.Location = New System.Drawing.Point(579, 35)
+		Me.Label8.Location = New System.Drawing.Point(575, 35)
 		Me.Label8.Name = "Label8"
 		Me.Label8.Size = New System.Drawing.Size(90, 13)
 		Me.Label8.TabIndex = 6
@@ -384,9 +393,9 @@ Partial Class mainForm
 		'udIndex
 		'
 		Me.udIndex.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.udIndex.Location = New System.Drawing.Point(675, 32)
+		Me.udIndex.Location = New System.Drawing.Point(671, 32)
 		Me.udIndex.Name = "udIndex"
-		Me.udIndex.Size = New System.Drawing.Size(79, 20)
+		Me.udIndex.Size = New System.Drawing.Size(77, 20)
 		Me.udIndex.TabIndex = 5
 		'
 		'Label9
@@ -406,7 +415,7 @@ Partial Class mainForm
 		Me.cboxType.FormattingEnabled = True
 		Me.cboxType.Location = New System.Drawing.Point(117, 31)
 		Me.cboxType.Name = "cboxType"
-		Me.cboxType.Size = New System.Drawing.Size(160, 21)
+		Me.cboxType.Size = New System.Drawing.Size(158, 21)
 		Me.cboxType.TabIndex = 3
 		'
 		'panelRC
@@ -426,25 +435,26 @@ Partial Class mainForm
 		Me.panelRC.Controls.Add(Me.Label11, 2, 0)
 		Me.panelRC.Controls.Add(Me.Label10, 0, 0)
 		Me.panelRC.Controls.Add(Me.efSeal, 1, 0)
-		Me.panelRC.Location = New System.Drawing.Point(283, 29)
+		Me.panelRC.Location = New System.Drawing.Point(281, 29)
 		Me.panelRC.Name = "panelRC"
 		Me.panelRC.RowCount = 1
 		Me.panelRC.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.panelRC.Size = New System.Drawing.Size(290, 26)
+		Me.panelRC.Size = New System.Drawing.Size(288, 26)
 		Me.panelRC.TabIndex = 4
 		'
 		'efRC
 		'
-		Me.efRC.Location = New System.Drawing.Point(192, 3)
+		Me.efRC.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.efRC.Location = New System.Drawing.Point(191, 3)
 		Me.efRC.Name = "efRC"
-		Me.efRC.Size = New System.Drawing.Size(90, 20)
+		Me.efRC.Size = New System.Drawing.Size(94, 20)
 		Me.efRC.TabIndex = 1
 		'
 		'Label11
 		'
 		Me.Label11.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label11.AutoSize = True
-		Me.Label11.Location = New System.Drawing.Point(151, 6)
+		Me.Label11.Location = New System.Drawing.Point(150, 6)
 		Me.Label11.Name = "Label11"
 		Me.Label11.Size = New System.Drawing.Size(35, 13)
 		Me.Label11.TabIndex = 2
@@ -462,30 +472,19 @@ Partial Class mainForm
 		'
 		'efSeal
 		'
+		Me.efSeal.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
 		Me.efSeal.Location = New System.Drawing.Point(50, 3)
 		Me.efSeal.Name = "efSeal"
-		Me.efSeal.Size = New System.Drawing.Size(89, 20)
+		Me.efSeal.Size = New System.Drawing.Size(94, 20)
 		Me.efSeal.TabIndex = 0
 		'
 		'writeres
 		'
 		Me.writeres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.writeres.Location = New System.Drawing.Point(138, 195)
+		Me.writeres.Location = New System.Drawing.Point(144, 195)
 		Me.writeres.Name = "writeres"
 		Me.writeres.Size = New System.Drawing.Size(39, 20)
 		Me.writeres.TabIndex = 10
-		'
-		'pbWriteCheck
-		'
-		Me.pbWriteCheck.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.pbWriteCheck.AutoSize = True
-		Me.pbWriteCheck.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
-		Me.pbWriteCheck.Location = New System.Drawing.Point(3, 193)
-		Me.pbWriteCheck.Name = "pbWriteCheck"
-		Me.pbWriteCheck.Size = New System.Drawing.Size(129, 23)
-		Me.pbWriteCheck.TabIndex = 9
-		Me.pbWriteCheck.Text = "Impression d'un chèque"
-		Me.pbWriteCheck.UseVisualStyleBackColor = True
 		'
 		'TableLayoutPanel6
 		'
@@ -498,11 +497,11 @@ Partial Class mainForm
 		Me.TableLayoutPanel6.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle())
 		Me.TableLayoutPanel6.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
 		Me.TableLayoutPanel6.Controls.Add(Me.cbAbortCheckEjected, 0, 0)
-		Me.TableLayoutPanel6.Location = New System.Drawing.Point(183, 256)
+		Me.TableLayoutPanel6.Location = New System.Drawing.Point(189, 256)
 		Me.TableLayoutPanel6.Name = "TableLayoutPanel6"
 		Me.TableLayoutPanel6.RowCount = 1
 		Me.TableLayoutPanel6.RowStyles.Add(New System.Windows.Forms.RowStyle())
-		Me.TableLayoutPanel6.Size = New System.Drawing.Size(757, 23)
+		Me.TableLayoutPanel6.Size = New System.Drawing.Size(751, 23)
 		Me.TableLayoutPanel6.TabIndex = 14
 		'
 		'cbAbortCheckEjected
@@ -520,7 +519,7 @@ Partial Class mainForm
 		'abortres
 		'
 		Me.abortres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.abortres.Location = New System.Drawing.Point(138, 257)
+		Me.abortres.Location = New System.Drawing.Point(144, 257)
 		Me.abortres.Name = "abortres"
 		Me.abortres.Size = New System.Drawing.Size(39, 20)
 		Me.abortres.TabIndex = 13
@@ -528,7 +527,7 @@ Partial Class mainForm
 		'writeexres
 		'
 		Me.writeexres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.writeexres.Location = New System.Drawing.Point(138, 115)
+		Me.writeexres.Location = New System.Drawing.Point(144, 115)
 		Me.writeexres.Name = "writeexres"
 		Me.writeexres.Size = New System.Drawing.Size(39, 20)
 		Me.writeexres.TabIndex = 7
@@ -536,7 +535,7 @@ Partial Class mainForm
 		'readres
 		'
 		Me.readres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.readres.Location = New System.Drawing.Point(138, 51)
+		Me.readres.Location = New System.Drawing.Point(144, 51)
 		Me.readres.Name = "readres"
 		Me.readres.Size = New System.Drawing.Size(39, 20)
 		Me.readres.TabIndex = 4
@@ -548,7 +547,7 @@ Partial Class mainForm
 		Me.pbAbort.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
 		Me.pbAbort.Location = New System.Drawing.Point(3, 256)
 		Me.pbAbort.Name = "pbAbort"
-		Me.pbAbort.Size = New System.Drawing.Size(129, 23)
+		Me.pbAbort.Size = New System.Drawing.Size(135, 23)
 		Me.pbAbort.TabIndex = 12
 		Me.pbAbort.Text = "Annulation/Ejection"
 		Me.pbAbort.UseVisualStyleBackColor = True
@@ -569,12 +568,12 @@ Partial Class mainForm
 		Me.TableLayoutPanel5.Controls.Add(Me.TableLayoutPanel9, 0, 1)
 		Me.TableLayoutPanel5.Controls.Add(Me.efWrite, 0, 0)
 		Me.TableLayoutPanel5.Controls.Add(Me.Label4, 0, 0)
-		Me.TableLayoutPanel5.Location = New System.Drawing.Point(183, 96)
+		Me.TableLayoutPanel5.Location = New System.Drawing.Point(189, 96)
 		Me.TableLayoutPanel5.Name = "TableLayoutPanel5"
 		Me.TableLayoutPanel5.RowCount = 2
 		Me.TableLayoutPanel5.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanel5.RowStyles.Add(New System.Windows.Forms.RowStyle())
-		Me.TableLayoutPanel5.Size = New System.Drawing.Size(757, 58)
+		Me.TableLayoutPanel5.Size = New System.Drawing.Size(751, 58)
 		Me.TableLayoutPanel5.TabIndex = 8
 		'
 		'TableLayoutPanel9
@@ -600,7 +599,7 @@ Partial Class mainForm
 		Me.TableLayoutPanel9.Name = "TableLayoutPanel9"
 		Me.TableLayoutPanel9.RowCount = 1
 		Me.TableLayoutPanel9.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.TableLayoutPanel9.Size = New System.Drawing.Size(751, 26)
+		Me.TableLayoutPanel9.Size = New System.Drawing.Size(745, 26)
 		Me.TableLayoutPanel9.TabIndex = 4
 		'
 		'cbWriteExTimeout
@@ -628,7 +627,7 @@ Partial Class mainForm
 		'udWriteExTimer
 		'
 		Me.udWriteExTimer.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.udWriteExTimer.Location = New System.Drawing.Point(703, 3)
+		Me.udWriteExTimer.Location = New System.Drawing.Point(697, 3)
 		Me.udWriteExTimer.Maximum = New Decimal(New Integer() {30, 0, 0, 0})
 		Me.udWriteExTimer.Minimum = New Decimal(New Integer() {5, 0, 0, 0})
 		Me.udWriteExTimer.Name = "udWriteExTimer"
@@ -640,7 +639,7 @@ Partial Class mainForm
 		'
 		Me.Label12.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label12.AutoSize = True
-		Me.Label12.Location = New System.Drawing.Point(661, 6)
+		Me.Label12.Location = New System.Drawing.Point(655, 6)
 		Me.Label12.Name = "Label12"
 		Me.Label12.Size = New System.Drawing.Size(36, 13)
 		Me.Label12.TabIndex = 3
@@ -654,7 +653,7 @@ Partial Class mainForm
 		Me.Label15.ForeColor = System.Drawing.Color.FromArgb(CType(CType(192, Byte), Integer), CType(CType(0, Byte), Integer), CType(CType(0, Byte), Integer))
 		Me.Label15.Location = New System.Drawing.Point(144, 7)
 		Me.Label15.Name = "Label15"
-		Me.Label15.Size = New System.Drawing.Size(511, 12)
+		Me.Label15.Size = New System.Drawing.Size(505, 12)
 		Me.Label15.TabIndex = 7
 		Me.Label15.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
 		'
@@ -663,7 +662,7 @@ Partial Class mainForm
 		Me.efWrite.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
 		Me.efWrite.Location = New System.Drawing.Point(96, 3)
 		Me.efWrite.Name = "efWrite"
-		Me.efWrite.Size = New System.Drawing.Size(658, 20)
+		Me.efWrite.Size = New System.Drawing.Size(652, 20)
 		Me.efWrite.TabIndex = 0
 		'
 		'Label4
@@ -696,12 +695,12 @@ Partial Class mainForm
 		Me.TableLayoutPanel3.Controls.Add(Me.efCHPN, 4, 0)
 		Me.TableLayoutPanel3.Controls.Add(Me.Label5, 3, 0)
 		Me.TableLayoutPanel3.Controls.Add(Me.TableLayoutPanel8, 0, 1)
-		Me.TableLayoutPanel3.Location = New System.Drawing.Point(183, 32)
+		Me.TableLayoutPanel3.Location = New System.Drawing.Point(189, 32)
 		Me.TableLayoutPanel3.Name = "TableLayoutPanel3"
 		Me.TableLayoutPanel3.RowCount = 2
 		Me.TableLayoutPanel3.RowStyles.Add(New System.Windows.Forms.RowStyle())
 		Me.TableLayoutPanel3.RowStyles.Add(New System.Windows.Forms.RowStyle())
-		Me.TableLayoutPanel3.Size = New System.Drawing.Size(757, 58)
+		Me.TableLayoutPanel3.Size = New System.Drawing.Size(751, 58)
 		Me.TableLayoutPanel3.TabIndex = 5
 		'
 		'cbReadCheckInside
@@ -722,7 +721,7 @@ Partial Class mainForm
 		Me.efRaw.Location = New System.Drawing.Point(222, 3)
 		Me.efRaw.Name = "efRaw"
 		Me.efRaw.ReadOnly = True
-		Me.efRaw.Size = New System.Drawing.Size(240, 20)
+		Me.efRaw.Size = New System.Drawing.Size(237, 20)
 		Me.efRaw.TabIndex = 1
 		'
 		'Label6
@@ -738,17 +737,17 @@ Partial Class mainForm
 		'efCHPN
 		'
 		Me.efCHPN.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.efCHPN.Location = New System.Drawing.Point(514, 3)
+		Me.efCHPN.Location = New System.Drawing.Point(511, 3)
 		Me.efCHPN.Name = "efCHPN"
 		Me.efCHPN.ReadOnly = True
-		Me.efCHPN.Size = New System.Drawing.Size(240, 20)
+		Me.efCHPN.Size = New System.Drawing.Size(237, 20)
 		Me.efCHPN.TabIndex = 2
 		'
 		'Label5
 		'
 		Me.Label5.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label5.AutoSize = True
-		Me.Label5.Location = New System.Drawing.Point(468, 6)
+		Me.Label5.Location = New System.Drawing.Point(465, 6)
 		Me.Label5.Name = "Label5"
 		Me.Label5.Size = New System.Drawing.Size(40, 13)
 		Me.Label5.TabIndex = 2
@@ -776,7 +775,7 @@ Partial Class mainForm
 		Me.TableLayoutPanel8.Name = "TableLayoutPanel8"
 		Me.TableLayoutPanel8.RowCount = 1
 		Me.TableLayoutPanel8.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
-		Me.TableLayoutPanel8.Size = New System.Drawing.Size(751, 26)
+		Me.TableLayoutPanel8.Size = New System.Drawing.Size(745, 26)
 		Me.TableLayoutPanel8.TabIndex = 3
 		'
 		'cbReadTimeout
@@ -805,7 +804,7 @@ Partial Class mainForm
 		'
 		Me.Label1.Anchor = System.Windows.Forms.AnchorStyles.Right
 		Me.Label1.AutoSize = True
-		Me.Label1.Location = New System.Drawing.Point(661, 6)
+		Me.Label1.Location = New System.Drawing.Point(655, 6)
 		Me.Label1.Name = "Label1"
 		Me.Label1.Size = New System.Drawing.Size(36, 13)
 		Me.Label1.TabIndex = 2
@@ -814,25 +813,13 @@ Partial Class mainForm
 		'udReadTimer
 		'
 		Me.udReadTimer.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.udReadTimer.Location = New System.Drawing.Point(703, 3)
+		Me.udReadTimer.Location = New System.Drawing.Point(697, 3)
 		Me.udReadTimer.Maximum = New Decimal(New Integer() {30, 0, 0, 0})
 		Me.udReadTimer.Minimum = New Decimal(New Integer() {5, 0, 0, 0})
 		Me.udReadTimer.Name = "udReadTimer"
 		Me.udReadTimer.Size = New System.Drawing.Size(45, 20)
 		Me.udReadTimer.TabIndex = 3
 		Me.udReadTimer.Value = New Decimal(New Integer() {5, 0, 0, 0})
-		'
-		'pbRead
-		'
-		Me.pbRead.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.pbRead.AutoSize = True
-		Me.pbRead.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
-		Me.pbRead.Location = New System.Drawing.Point(3, 49)
-		Me.pbRead.Name = "pbRead"
-		Me.pbRead.Size = New System.Drawing.Size(129, 23)
-		Me.pbRead.TabIndex = 3
-		Me.pbRead.Text = "Lecture d'un chèque"
-		Me.pbRead.UseVisualStyleBackColor = True
 		'
 		'pbState
 		'
@@ -841,7 +828,7 @@ Partial Class mainForm
 		Me.pbState.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
 		Me.pbState.Location = New System.Drawing.Point(3, 3)
 		Me.pbState.Name = "pbState"
-		Me.pbState.Size = New System.Drawing.Size(129, 23)
+		Me.pbState.Size = New System.Drawing.Size(135, 23)
 		Me.pbState.TabIndex = 0
 		Me.pbState.Text = "Etat du lecteur"
 		Me.pbState.UseVisualStyleBackColor = True
@@ -857,11 +844,11 @@ Partial Class mainForm
 		Me.TableLayoutPanel4.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle())
 		Me.TableLayoutPanel4.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100.0!))
 		Me.TableLayoutPanel4.Controls.Add(Me.cbStateCheckInside, 0, 0)
-		Me.TableLayoutPanel4.Location = New System.Drawing.Point(183, 3)
+		Me.TableLayoutPanel4.Location = New System.Drawing.Point(189, 3)
 		Me.TableLayoutPanel4.Name = "TableLayoutPanel4"
 		Me.TableLayoutPanel4.RowCount = 1
 		Me.TableLayoutPanel4.RowStyles.Add(New System.Windows.Forms.RowStyle())
-		Me.TableLayoutPanel4.Size = New System.Drawing.Size(757, 23)
+		Me.TableLayoutPanel4.Size = New System.Drawing.Size(751, 23)
 		Me.TableLayoutPanel4.TabIndex = 2
 		'
 		'cbStateCheckInside
@@ -876,25 +863,142 @@ Partial Class mainForm
 		Me.cbStateCheckInside.Text = "Chèque devant le lecteur prêt à être lu"
 		Me.cbStateCheckInside.UseVisualStyleBackColor = True
 		'
+		'stateres
+		'
+		Me.stateres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.stateres.Location = New System.Drawing.Point(144, 4)
+		Me.stateres.Name = "stateres"
+		Me.stateres.Size = New System.Drawing.Size(39, 20)
+		Me.stateres.TabIndex = 1
+		'
+		'TableLayoutPanel1
+		'
+		Me.TableLayoutPanel1.Anchor = CType((((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Bottom) _
+			Or System.Windows.Forms.AnchorStyles.Left) _
+			Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.TableLayoutPanel1.AutoSize = True
+		Me.TableLayoutPanel1.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.TableLayoutPanel1.ColumnCount = 1
+		Me.TableLayoutPanel1.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel1.Controls.Add(Me.pbReadAsync, 0, 1)
+		Me.TableLayoutPanel1.Controls.Add(Me.pbRead, 0, 0)
+		Me.TableLayoutPanel1.Location = New System.Drawing.Point(3, 32)
+		Me.TableLayoutPanel1.Name = "TableLayoutPanel1"
+		Me.TableLayoutPanel1.RowCount = 2
+		Me.TableLayoutPanel1.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel1.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel1.Size = New System.Drawing.Size(135, 58)
+		Me.TableLayoutPanel1.TabIndex = 3
+		'
+		'pbReadAsync
+		'
+		Me.pbReadAsync.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.pbReadAsync.AutoSize = True
+		Me.pbReadAsync.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.pbReadAsync.Location = New System.Drawing.Point(3, 32)
+		Me.pbReadAsync.Name = "pbReadAsync"
+		Me.pbReadAsync.Size = New System.Drawing.Size(129, 23)
+		Me.pbReadAsync.TabIndex = 1
+		Me.pbReadAsync.Text = "Lecture asynchrone"
+		Me.pbReadAsync.UseVisualStyleBackColor = True
+		'
+		'pbRead
+		'
+		Me.pbRead.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.pbRead.AutoSize = True
+		Me.pbRead.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.pbRead.Location = New System.Drawing.Point(3, 3)
+		Me.pbRead.Name = "pbRead"
+		Me.pbRead.Size = New System.Drawing.Size(129, 23)
+		Me.pbRead.TabIndex = 0
+		Me.pbRead.Text = "Lecture d'un chèque"
+		Me.pbRead.UseVisualStyleBackColor = True
+		'
+		'TableLayoutPanel11
+		'
+		Me.TableLayoutPanel11.Anchor = CType((((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Bottom) _
+			Or System.Windows.Forms.AnchorStyles.Left) _
+			Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.TableLayoutPanel11.AutoSize = True
+		Me.TableLayoutPanel11.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.TableLayoutPanel11.ColumnCount = 1
+		Me.TableLayoutPanel11.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel11.Controls.Add(Me.pbWriteAsync, 0, 1)
+		Me.TableLayoutPanel11.Controls.Add(Me.pbWrite, 0, 0)
+		Me.TableLayoutPanel11.Location = New System.Drawing.Point(3, 96)
+		Me.TableLayoutPanel11.Name = "TableLayoutPanel11"
+		Me.TableLayoutPanel11.RowCount = 2
+		Me.TableLayoutPanel11.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel11.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel11.Size = New System.Drawing.Size(135, 58)
+		Me.TableLayoutPanel11.TabIndex = 6
+		'
+		'pbWriteAsync
+		'
+		Me.pbWriteAsync.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.pbWriteAsync.AutoSize = True
+		Me.pbWriteAsync.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.pbWriteAsync.Location = New System.Drawing.Point(3, 32)
+		Me.pbWriteAsync.Name = "pbWriteAsync"
+		Me.pbWriteAsync.Size = New System.Drawing.Size(129, 23)
+		Me.pbWriteAsync.TabIndex = 1
+		Me.pbWriteAsync.Text = "Impression asynchrone"
+		Me.pbWriteAsync.UseVisualStyleBackColor = True
+		'
 		'pbWrite
 		'
 		Me.pbWrite.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
 		Me.pbWrite.AutoSize = True
 		Me.pbWrite.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
-		Me.pbWrite.Location = New System.Drawing.Point(3, 113)
+		Me.pbWrite.Location = New System.Drawing.Point(3, 3)
 		Me.pbWrite.Name = "pbWrite"
 		Me.pbWrite.Size = New System.Drawing.Size(129, 23)
-		Me.pbWrite.TabIndex = 6
+		Me.pbWrite.TabIndex = 0
 		Me.pbWrite.Text = "Impression"
 		Me.pbWrite.UseVisualStyleBackColor = True
 		'
-		'stateres
+		'TableLayoutPanel12
 		'
-		Me.stateres.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.stateres.Location = New System.Drawing.Point(138, 4)
-		Me.stateres.Name = "stateres"
-		Me.stateres.Size = New System.Drawing.Size(39, 20)
-		Me.stateres.TabIndex = 1
+		Me.TableLayoutPanel12.Anchor = CType((((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Bottom) _
+			Or System.Windows.Forms.AnchorStyles.Left) _
+			Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.TableLayoutPanel12.AutoSize = True
+		Me.TableLayoutPanel12.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.TableLayoutPanel12.ColumnCount = 1
+		Me.TableLayoutPanel12.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel12.Controls.Add(Me.pbWriteCheck, 0, 0)
+		Me.TableLayoutPanel12.Controls.Add(Me.pbWriteCheckAsync, 0, 1)
+		Me.TableLayoutPanel12.Location = New System.Drawing.Point(3, 160)
+		Me.TableLayoutPanel12.Name = "TableLayoutPanel12"
+		Me.TableLayoutPanel12.RowCount = 2
+		Me.TableLayoutPanel12.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel12.RowStyles.Add(New System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
+		Me.TableLayoutPanel12.Size = New System.Drawing.Size(135, 90)
+		Me.TableLayoutPanel12.TabIndex = 9
+		'
+		'pbWriteCheck
+		'
+		Me.pbWriteCheck.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.pbWriteCheck.AutoSize = True
+		Me.pbWriteCheck.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.pbWriteCheck.Location = New System.Drawing.Point(3, 11)
+		Me.pbWriteCheck.Name = "pbWriteCheck"
+		Me.pbWriteCheck.Size = New System.Drawing.Size(129, 23)
+		Me.pbWriteCheck.TabIndex = 0
+		Me.pbWriteCheck.Text = "Impression d'un chèque"
+		Me.pbWriteCheck.UseVisualStyleBackColor = True
+		'
+		'pbWriteCheckAsync
+		'
+		Me.pbWriteCheckAsync.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.pbWriteCheckAsync.AutoSize = True
+		Me.pbWriteCheckAsync.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
+		Me.pbWriteCheckAsync.Location = New System.Drawing.Point(3, 56)
+		Me.pbWriteCheckAsync.Name = "pbWriteCheckAsync"
+		Me.pbWriteCheckAsync.Size = New System.Drawing.Size(129, 23)
+		Me.pbWriteCheckAsync.TabIndex = 1
+		Me.pbWriteCheckAsync.Text = "Impression asynchrone"
+		Me.pbWriteCheckAsync.UseVisualStyleBackColor = True
 		'
 		'mainForm
 		'
@@ -902,7 +1006,7 @@ Partial Class mainForm
 		Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
 		Me.AutoSize = True
 		Me.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink
-		Me.ClientSize = New System.Drawing.Size(973, 348)
+		Me.ClientSize = New System.Drawing.Size(973, 351)
 		Me.Controls.Add(Me.panelMain)
 		Me.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow
 		Me.MaximizeBox = False
@@ -938,6 +1042,12 @@ Partial Class mainForm
 		CType(Me.udReadTimer, System.ComponentModel.ISupportInitialize).EndInit()
 		Me.TableLayoutPanel4.ResumeLayout(False)
 		Me.TableLayoutPanel4.PerformLayout()
+		Me.TableLayoutPanel1.ResumeLayout(False)
+		Me.TableLayoutPanel1.PerformLayout()
+		Me.TableLayoutPanel11.ResumeLayout(False)
+		Me.TableLayoutPanel11.PerformLayout()
+		Me.TableLayoutPanel12.ResumeLayout(False)
+		Me.TableLayoutPanel12.PerformLayout()
 		Me.ResumeLayout(False)
 
 	End Sub
@@ -1003,4 +1113,10 @@ Partial Class mainForm
 	Friend WithEvents udReadTimer As NumericUpDown
 	Friend WithEvents Label14 As Label
 	Friend WithEvents Label15 As Label
+	Friend WithEvents TableLayoutPanel1 As TableLayoutPanel
+	Friend WithEvents pbReadAsync As Button
+	Friend WithEvents TableLayoutPanel11 As TableLayoutPanel
+	Friend WithEvents pbWriteAsync As Button
+	Friend WithEvents TableLayoutPanel12 As TableLayoutPanel
+	Friend WithEvents pbWriteCheckAsync As Button
 End Class
