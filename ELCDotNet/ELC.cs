@@ -132,7 +132,7 @@ namespace ELCDotNet
 		public IntPtr WindowToWarn { get => _windowtowarn; set => _windowtowarn = value; }
 		private IntPtr _windowtowarn = IntPtr.Zero;
 		/// <summary>
-		/// Get last async result (usefull if ELCxxxResult returned false)
+		/// Get last async result
 		/// </summary>
 		public ELCi2200.ELCResult LastAsyncResult { get => IntPtr.Zero != pelc ? ELCi2200.ELCLastAsyncResult(pelc) : ELCi2200.ELCResult.none; }
 		#endregion
@@ -156,7 +156,9 @@ namespace ELCDotNet
 		/// Open the ELC using a known COM port
 		/// </summary>
 		/// <param name="port">COM port to use</param>
-		/// <param name="useLog">Indicates whether a log file must be opened (and an output created)</param>
+		/// <param name="useLog">Indicates whether a log file must be opened (and an output created). File is called "ELC on COMx.log" with "x" indicating the COM port.
+		/// It is created first in the current directory, if not possible then in Documents, if not possible then in the TEMP folder.
+		/// Beware that file is never purged and can become very big.</param>
 		/// <returns>True if opened, false otherwise</returns>
 		public bool Open(int port, bool useLog = true)
 		{
@@ -303,14 +305,13 @@ namespace ELCDotNet
 		/// Read a check
 		/// </summary>
 		/// <param name="o"><see cref="ObjectToPrint"/></param>
+		/// <param name="printed">If return is true, indicates the text which has been printed</param>
 		/// <param name="timer">Timer to wait for printing to complete, <see cref="ELCi2200.NO_TIMER"/> for infinite wait</param>
-		/// <param name="documentIsInside">If return is true, indicates whether a check note is inside the reader or notthe check CMC7 in CHPN compatible format</param>
 		/// <returns>True if operation has been successfully completed, false otherwise</returns>
 		public bool Write(ObjectToPrint o, ref string printed, int timer = ELCi2200.NO_TIMER)
 		{
 			string s = PrepareStringToPrint(o);
-			StringBuilder printedx = new StringBuilder(s);
-			if (WriteEx(ref printed, timer))
+			if (WriteEx(ref s, timer))
 			{
 				printed = s;
 				return true;
@@ -343,6 +344,8 @@ namespace ELCDotNet
 		/// Asynchronously write a check
 		/// Asynchronous warning is made using the <see cref="AsyncStartUserTimerEvent"/>, <see cref="AsyncProcessHasEndedEvent"/> and <see cref="WindowToWarn"/> completed with <see cref="WMStartTimer"/> and <see cref="WMProcessHasEndedEvent"/> objects
 		/// </summary>
+		/// <param name="o"><see cref="ObjectToPrint"/></param>
+		/// <param name="printed">If return is true, indicates the text which has been printed</param>
 		/// <param name="timer">Timer to wait for reading to complete or times out, <see cref="ELCi2200.NO_TIMER"/> for infinite wait</param>
 		/// <returns>True if operation has been successfully started, false otherwise</returns>
 		public bool WriteAsync(ObjectToPrint o, ref string printed, int timer = ELCi2200.NO_TIMER)

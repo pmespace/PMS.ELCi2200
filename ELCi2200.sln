@@ -24,6 +24,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ELCDotNet", "ELCDotNet\ELCD
 		{180AFDD6-45EB-4D4F-9945-5A9594AFFC34} = {180AFDD6-45EB-4D4F-9945-5A9594AFFC34}
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestCheck", "TestCheck\TestCheck.csproj", "{31BED019-4887-494B-AA59-33ABBF5D1019}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -82,6 +84,18 @@ Global
 		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x64.Build.0 = Release|Any CPU
 		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x86.ActiveCfg = Release|Any CPU
 		{1C0161EF-5DA5-4494-A95B-B23C60D8E3DF}.Release|x86.Build.0 = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|x64.Build.0 = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Debug|x86.Build.0 = Debug|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|Any CPU.Build.0 = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|x64.ActiveCfg = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|x64.Build.0 = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|x86.ActiveCfg = Release|Any CPU
+		{31BED019-4887-494B-AA59-33ABBF5D1019}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

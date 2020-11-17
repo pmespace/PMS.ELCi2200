@@ -48,6 +48,7 @@ Public Class mainForm
 			Catch ex As Exception
 				cboxType.SelectedIndex = 0
 			End Try
+			cbGenerateLog.Checked = settings.GenerateLog
 		End If
 	End Sub
 
@@ -64,6 +65,8 @@ Public Class mainForm
 		settings.Seal = efSeal.Text
 		settings.ResponseCode = efRC.Text
 		settings.Type = cboxType.SelectedItem
+		settings.GenerateLog = cbGenerateLog.Checked
+
 		Dim json As New CJson(Of Settings)
 		json.FileName = JSON_FILE_NAME
 		json.WriteSettings(settings)
@@ -85,7 +88,7 @@ Public Class mainForm
 		If Elc.Opened Then
 			Elc.Close()
 		Else
-			Elc.OpenWithDrivers("elcmanager.drivers.json")
+			Elc.OpenWithDrivers("elcmanager.drivers.json", cbGenerateLog.Checked)
 		End If
 		RAZResults()
 		SetOpenButton()
@@ -112,7 +115,7 @@ Public Class mainForm
 		'call requested function
 		If sender Is pbRead Then
 			'synchronous processing
-			Elc.Read(efRaw.Text, efCHPN.Text, docIsInside, udReadTimer.Value)
+			Elc.Read(raw, chpn, docIsInside, udReadTimer.Value)
 			f = Elc.LastAsyncResult
 		Else
 			'asynchronous processing
@@ -131,9 +134,10 @@ Public Class mainForm
 		readres.Text = (ELCi2200.ELCResult.completed = f).ToString
 		If ELCi2200.ELCResult.completed = f Then
 			cbReadCheckInside.Checked = docIsInside
-		Else
 			cbReadTimeout.Checked = Elc.Timeout
 			cbReadCancelled.Checked = Elc.Cancelled
+			efRaw.Text = raw
+			efCHPN.Text = chpn
 		End If
 		panelMain.Enabled = True
 	End Sub

@@ -12,4 +12,5 @@ Public Class Settings
 	Public Property TimerWrite As Integer
 	Public Property TimerWriteEx As Integer
 	Public Property Index As Integer
+	Public Property GenerateLog As Boolean
 End Class
