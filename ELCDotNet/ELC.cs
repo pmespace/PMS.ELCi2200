@@ -88,7 +88,7 @@ namespace ELCDotNet
 
 		#region public properties
 		/// <summary>
-		/// Indicates whethr teh ELC has been opened or not
+		/// Indicates whether the ELC device has been opened or not
 		/// </summary>
 		public bool Opened { get => _opened; private set => _opened = value; }
 		private bool _opened = false;

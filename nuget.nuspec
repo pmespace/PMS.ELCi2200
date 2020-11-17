@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package >
+  <metadata>
+    <id>PMS.ELC</id>
+    <version>1.0.0</version>
+    <title>PMS.ELC</title>
+    <authors>philippemp31</authors>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <repository type="git" url="https://github.com/pmespace/PMS.ELC.git" branch="master" />
+    <projectUrl>https://github.com/pmespace/PMS.ELC/</projectUrl>
+    <description>Interface for an INGENICO ELCi2200 check reader</description>
+    <releaseNotes>
+      1.0.0
+      - Creation
+    </releaseNotes>
+    <copyright>PMS - philippemp31 at outlook dot com</copyright>
+    <developmentDependency>true</developmentDependency>
+    <tags>ELCi2200 INGENICO</tags>
+    <dependencies>
+      <group targetFramework=".NETFramework4.7">
+        <dependency id="PMS.COMMON" version="2.0.5" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src=".\Release\PMS.ELC.dll" target="lib\net47"></file>
+    <file src=".\Release\PMS.ELC.xml" target="lib\net47"></file>
+    <file src=".\Release\ELCi2200.dll" target="lib\net47"></file>
+    <file src=".\Release\TestELC.exe" target="lib\net47"></file>
+    <file src=".\Release\ELCManager.exe" target="lib\net47"></file>
+  </files>
+</package>

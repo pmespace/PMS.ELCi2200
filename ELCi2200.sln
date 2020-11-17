@@ -11,6 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 		ELCi2200-ATEN UC232B.pdf = ELCi2200-ATEN UC232B.pdf
+		nuget.nuspec = nuget.nuspec
 		Protocole_cheque_C4000.pdf = Protocole_cheque_C4000.pdf
 		Protocole_cheque_Elite 200.pdf = Protocole_cheque_Elite 200.pdf
 		README.md = README.md

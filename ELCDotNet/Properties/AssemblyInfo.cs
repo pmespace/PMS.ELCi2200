@@ -5,13 +5,13 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("ELC")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("PMS.ELCDotNet")]
+[assembly: AssemblyDescription("Interface de pilotage d'un ELC i2200 d'INGENICO")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("ELC")]
+[assembly: AssemblyCompany("PMS")]
+[assembly: AssemblyProduct("PMS.ELCDotNet")]
 [assembly: AssemblyCopyright("Copyright ©  2020")]
-[assembly: AssemblyTrademark("")]
+[assembly: AssemblyTrademark("PME")]
 [assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
