@@ -550,6 +550,8 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 				if (ERROR_IO_PENDING == (*pdwError = GetLastError()))
 				{
 					HANDLE handles[] = { o.hEvent, MYPELC->stopReading };
+					/* If using the native driver (thus the USB interface on the ELC) WaitForMultipleObjects NEVER returns if INFINITE wait
+					or always returns with a timeout if not INFINITE wait. Has the device received the command before ??? */
 					switch (DWORD dw = WaitForMultipleObjects(_countof(handles), handles, false, dwTimeout))
 					{
 						case WAIT_FAILED:
@@ -573,7 +575,7 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 								if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
 								{
 									success = true;
-									keepCarryOn = 0 == *pdwRead;//&& CanContinueReading(pelc);
+									keepCarryOn = 0 == *pdwRead;
 									LOGONLY("WAIT_OBJECT: OVERLAPPED");
 								}
 								else
@@ -594,31 +596,8 @@ static BOOL ReadData(ELC pelc, char* data, int length, LPDWORD pdwRead, LPDWORD 
 						}
 
 						default:
-						{
-							//switch (*pdwError)
-							//{
-								/* this is the error reported using the native USB cable delivered with the ELC (cp210x by Silicon Labs)
-								*  but when receiving that error using GetOverlappedResult either never returns (if using true when calling the function
-								*  or keeps giving the same error (if using false when calling the function) => it doesn't work at all, remove comment
-								*  at your own risks */
-								//case 997:
-								//	if (GetOverlappedResult(MYPELC->handle, &o, pdwRead, true))
-								//	{
-								//		success = true;
-								//		keepCarryOn = 0 == *pdwRead && CanContinueReading(pelc);
-								//		LOGONLY("WAIT_OBJECT: OVERLAPPED");
-								//	}
-								//	else
-								//	{
-								//		LOGLASTERROR("WAIT_OBJECT: OVERLAPPED", *pdwError = GetLastError());
-								//	}
-								//	break;
-							//default:
 							LOGLASTERROR("READFILE", *pdwError = GetLastError());
-							//	break;
-							//}
 							break;
-						}
 					}
 				}
 				else
