@@ -88,6 +88,11 @@ namespace ELCDotNet
 
 		#region public properties
 		/// <summary>
+		/// Main window to overtake when displaying a processing window)
+		/// It is very godd behaviour to set this with the handle of the application main window
+		/// </summary>
+		public IntPtr MainWindow { get; set; }
+		/// <summary>
 		/// Indicates whether the ELC device has been opened or not
 		/// </summary>
 		public bool Opened { get => _opened; private set => _opened = value; }

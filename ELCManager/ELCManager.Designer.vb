@@ -26,6 +26,7 @@ Partial Class mainForm
 		Me.pbOpen = New System.Windows.Forms.Button()
 		Me.TableLayoutPanel2 = New System.Windows.Forms.TableLayoutPanel()
 		Me.efPort = New System.Windows.Forms.TextBox()
+		Me.cbGenerateLog = New System.Windows.Forms.CheckBox()
 		Me.TableLayoutPanelFunctions = New System.Windows.Forms.TableLayoutPanel()
 		Me.TableLayoutPanel7 = New System.Windows.Forms.TableLayoutPanel()
 		Me.TableLayoutPanel10 = New System.Windows.Forms.TableLayoutPanel()
@@ -42,13 +43,13 @@ Partial Class mainForm
 		Me.udAmount = New System.Windows.Forms.NumericUpDown()
 		Me.Label8 = New System.Windows.Forms.Label()
 		Me.udIndex = New System.Windows.Forms.NumericUpDown()
-		Me.Label9 = New System.Windows.Forms.Label()
-		Me.cboxType = New System.Windows.Forms.ComboBox()
 		Me.panelRC = New System.Windows.Forms.TableLayoutPanel()
 		Me.efRC = New System.Windows.Forms.TextBox()
 		Me.Label11 = New System.Windows.Forms.Label()
 		Me.Label10 = New System.Windows.Forms.Label()
 		Me.efSeal = New System.Windows.Forms.TextBox()
+		Me.cboxType = New System.Windows.Forms.ComboBox()
+		Me.Label9 = New System.Windows.Forms.Label()
 		Me.writeres = New System.Windows.Forms.TextBox()
 		Me.TableLayoutPanel6 = New System.Windows.Forms.TableLayoutPanel()
 		Me.cbAbortCheckEjected = New System.Windows.Forms.CheckBox()
@@ -89,7 +90,6 @@ Partial Class mainForm
 		Me.TableLayoutPanel12 = New System.Windows.Forms.TableLayoutPanel()
 		Me.pbWriteCheck = New System.Windows.Forms.Button()
 		Me.pbWriteCheckAsync = New System.Windows.Forms.Button()
-		Me.cbGenerateLog = New System.Windows.Forms.CheckBox()
 		Me.panelMain.SuspendLayout()
 		Me.TableLayoutPanel2.SuspendLayout()
 		Me.TableLayoutPanelFunctions.SuspendLayout()
@@ -170,6 +170,17 @@ Partial Class mainForm
 		Me.efPort.ReadOnly = True
 		Me.efPort.Size = New System.Drawing.Size(770, 20)
 		Me.efPort.TabIndex = 0
+		'
+		'cbGenerateLog
+		'
+		Me.cbGenerateLog.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.cbGenerateLog.AutoSize = True
+		Me.cbGenerateLog.Location = New System.Drawing.Point(779, 4)
+		Me.cbGenerateLog.Name = "cbGenerateLog"
+		Me.cbGenerateLog.Size = New System.Drawing.Size(112, 17)
+		Me.cbGenerateLog.TabIndex = 1
+		Me.cbGenerateLog.Text = "Générer fichier log"
+		Me.cbGenerateLog.UseVisualStyleBackColor = True
 		'
 		'TableLayoutPanelFunctions
 		'
@@ -404,26 +415,6 @@ Partial Class mainForm
 		Me.udIndex.Size = New System.Drawing.Size(62, 20)
 		Me.udIndex.TabIndex = 5
 		'
-		'Label9
-		'
-		Me.Label9.Anchor = System.Windows.Forms.AnchorStyles.Right
-		Me.Label9.AutoSize = True
-		Me.Label9.Location = New System.Drawing.Point(3, 7)
-		Me.Label9.Name = "Label9"
-		Me.Label9.Size = New System.Drawing.Size(34, 13)
-		Me.Label9.TabIndex = 8
-		Me.Label9.Text = "Type:"
-		'
-		'cboxType
-		'
-		Me.cboxType.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.cboxType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
-		Me.cboxType.FormattingEnabled = True
-		Me.cboxType.Location = New System.Drawing.Point(43, 3)
-		Me.cboxType.Name = "cboxType"
-		Me.cboxType.Size = New System.Drawing.Size(95, 21)
-		Me.cboxType.TabIndex = 0
-		'
 		'panelRC
 		'
 		Me.panelRC.Anchor = CType((((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Bottom) _
@@ -487,6 +478,26 @@ Partial Class mainForm
 		Me.efSeal.Name = "efSeal"
 		Me.efSeal.Size = New System.Drawing.Size(157, 20)
 		Me.efSeal.TabIndex = 1
+		'
+		'cboxType
+		'
+		Me.cboxType.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+		Me.cboxType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
+		Me.cboxType.FormattingEnabled = True
+		Me.cboxType.Location = New System.Drawing.Point(43, 3)
+		Me.cboxType.Name = "cboxType"
+		Me.cboxType.Size = New System.Drawing.Size(95, 21)
+		Me.cboxType.TabIndex = 0
+		'
+		'Label9
+		'
+		Me.Label9.Anchor = System.Windows.Forms.AnchorStyles.Right
+		Me.Label9.AutoSize = True
+		Me.Label9.Location = New System.Drawing.Point(3, 7)
+		Me.Label9.Name = "Label9"
+		Me.Label9.Size = New System.Drawing.Size(34, 13)
+		Me.Label9.TabIndex = 8
+		Me.Label9.Text = "Type:"
 		'
 		'writeres
 		'
@@ -1009,17 +1020,6 @@ Partial Class mainForm
 		Me.pbWriteCheckAsync.TabIndex = 1
 		Me.pbWriteCheckAsync.Text = "Impression asynchrone"
 		Me.pbWriteCheckAsync.UseVisualStyleBackColor = True
-		'
-		'cbGenerateLog
-		'
-		Me.cbGenerateLog.Anchor = CType((System.Windows.Forms.AnchorStyles.Left Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
-		Me.cbGenerateLog.AutoSize = True
-		Me.cbGenerateLog.Location = New System.Drawing.Point(779, 4)
-		Me.cbGenerateLog.Name = "cbGenerateLog"
-		Me.cbGenerateLog.Size = New System.Drawing.Size(112, 17)
-		Me.cbGenerateLog.TabIndex = 1
-		Me.cbGenerateLog.Text = "Générer fichier log"
-		Me.cbGenerateLog.UseVisualStyleBackColor = True
 		'
 		'mainForm
 		'

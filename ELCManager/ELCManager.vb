@@ -12,6 +12,7 @@ Public Class mainForm
 	Private wait As FWait
 
 	Private Sub mainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+		Elc.MainWindow = Handle
 		For i As PrintType = PrintType._begin + 1 To PrintType._end - 1
 			cboxType.Items.Add(i)
 		Next
@@ -142,7 +143,7 @@ Public Class mainForm
 		panelMain.Enabled = True
 	End Sub
 
-	Private Sub pbWrite_Click(sender As Object, e As EventArgs) Handles pbWrite.Click
+	Private Sub pbWrite_Click(sender As Object, e As EventArgs) Handles pbWrite.Click, pbWriteAsync.Click
 		panelMain.Enabled = False
 		RAZResults()
 		cbWriteExTimeout.Checked = False
@@ -201,7 +202,7 @@ Public Class mainForm
 		panelMain.Enabled = True
 	End Sub
 
-	Private Sub pbWriteCheck_Click(sender As Object, e As EventArgs) Handles pbWriteCheck.Click
+	Private Sub pbWriteCheck_Click(sender As Object, e As EventArgs) Handles pbWriteCheck.Click, pbWriteCheckAsync.Click
 		panelMain.Enabled = False
 		RAZResults()
 		Dim o As New ObjectToPrint With

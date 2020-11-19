@@ -113,6 +113,7 @@ namespace TestCheck
 
 		private void Form1_Load(object sender, EventArgs e)
 		{
+			Elc.MainWindow = Handle;
 			SetButtons();
 		}
 
@@ -224,7 +225,7 @@ namespace TestCheck
 			bool docinside = false;
 			if (Elc.Read(ref raw, ref chpn, ref docinside, 15))
 			{
-			cmc7.Text = chpn;
+				cmc7.Text = chpn;
 			}
 			log.Text = "Resultat: " + Elc.LastAsyncResult.ToString() + " - Raw: " + raw + " - CHPN: " + chpn + " - Doc dedans: " + docinside.ToString();
 		}
