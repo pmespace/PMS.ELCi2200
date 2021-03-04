@@ -67,8 +67,9 @@ enum class ELCResult
 // indicates to wait indefinitely
 #define NO_TIMER							0
 
-extern "C"
-{
+#ifdef __cplusplus
+extern "C" {
+#endif
 	DRIVERAPI ELC DRIVERCALL ELCInit();
 	DRIVERAPI void DRIVERCALL ELCRelease(ELC* ppelc);
 	DRIVERAPI BOOL DRIVERCALL ELCSetPort(ELC pelc, int port);
@@ -93,6 +94,9 @@ extern "C"
 	DRIVERAPI  BOOL DRIVERCALL ELCIsInProgress(ELC pelc);
 	DRIVERAPI  ELCResult DRIVERCALL  ELCLastAsyncResult(ELC pelc);
 	DRIVERAPI void DRIVERCALL ELCSetLogFile(ELC pelc, BOOL f);
+#ifdef __cplusplus
 }
+#endif
+
 
 #endif
