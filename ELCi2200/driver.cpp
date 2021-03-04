@@ -839,7 +839,7 @@ static BOOL StartAsyncResultThread(ELC pelc, int iTimer)
 /// </summary>
 /// <param name="usbDriver">USD driver to try to open</param>
 /// <returns>COM port if found, NO_COM_PORT otherwise</returns>
-DRIVERAPI int __stdcall ELCGetUSBComPort(char* usbDriver)
+DRIVERAPI int DRIVERCALL ELCGetUSBComPort(char* usbDriver)
 {
 	int result = NO_COM_PORT;
 	HDEVINFO DeviceInfoSet;
@@ -1613,7 +1613,7 @@ static void SaveCR(ELC pelc)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>A pointer to an internal structure if successfull, NULL otherwise</returns>
-DRIVERAPI ELC __stdcall ELCInit()
+DRIVERAPI ELC DRIVERCALL ELCInit()
 {
 	PELCSTRUCT pelcstruct;
 	if (NULL != (pelcstruct = (PELCSTRUCT)CALLOC(sizeof(ELCSTRUCT))))
@@ -1638,7 +1638,7 @@ DRIVERAPI ELC __stdcall ELCInit()
 /// Release resources
 /// </summary>
 /// <param name="pelc"></param>
-DRIVERAPI void __stdcall ELCRelease(ELC* ppelc)
+DRIVERAPI void DRIVERCALL ELCRelease(ELC* ppelc)
 {
 	ELCClose(*ppelc);
 	FREE((char**)ppelc);
@@ -1651,7 +1651,7 @@ DRIVERAPI void __stdcall ELCRelease(ELC* ppelc)
 /// <param name="pelc"></param>
 /// <param name="port">the port to use. It should be greater or equal to 0</param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCSetPort(ELC pelc, int port)
+DRIVERAPI BOOL DRIVERCALL ELCSetPort(ELC pelc, int port)
 {
 	MYPELCSTRUCT;
 	if (NULL != pelc && NO_COM_PORT < port)
@@ -1668,7 +1668,7 @@ DRIVERAPI BOOL __stdcall ELCSetPort(ELC pelc, int port)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc, BOOL UseLogFile)
+DRIVERAPI BOOL DRIVERCALL ELCOpen(ELC pelc, BOOL UseLogFile)
 {
 	MYPELCSTRUCT;
 	BOOL result = true;
@@ -1725,7 +1725,7 @@ DRIVERAPI BOOL __stdcall ELCOpen(ELC pelc, BOOL UseLogFile)
 /// <param name="pelc"></param>
 /// <param name="f"></param>
 /// <returns></returns>
-DRIVERAPI void __stdcall ELCSetLogFile(ELC pelc, BOOL f)
+DRIVERAPI void DRIVERCALL ELCSetLogFile(ELC pelc, BOOL f)
 {
 	if (f)
 	{
@@ -1802,7 +1802,7 @@ DRIVERAPI void __stdcall ELCSetLogFile(ELC pelc, BOOL f)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI int __stdcall ELCPort(ELC pelc)
+DRIVERAPI int DRIVERCALL ELCPort(ELC pelc)
 {
 	MYPELCSTRUCT;
 	if (NULL != pelc && IsOpen(pelc))
@@ -1816,7 +1816,7 @@ DRIVERAPI int __stdcall ELCPort(ELC pelc)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI void __stdcall ELCClose(ELC pelc)
+DRIVERAPI void DRIVERCALL ELCClose(ELC pelc)
 {
 	MYPELCSTRUCT;
 	if (IsOpen(pelc))
@@ -1842,7 +1842,7 @@ DRIVERAPI void __stdcall ELCClose(ELC pelc)
 /// <param name="pelc"></param>
 /// <param name="pfDocumentReadyToBeRead">true if a check note is ready to enter the reader, false otherwise (it doesn't say whether a check is inside the reader)</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
+DRIVERAPI BOOL DRIVERCALL ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
 {
 	MYPELCSTRUCT;
 	BOOL fOK = false;
@@ -1893,7 +1893,7 @@ DRIVERAPI BOOL __stdcall ELCStatus(ELC pelc, BOOL* pfDocumentReadyToBeRead)
 /// <param name="pelc"></param>
 /// <param name="pfDocumentEjected">OUT, true if the document has been ejected or no document was inside, false otherwise</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI BOOL __stdcall ELCAbort(ELC pelc, BOOL* pfDocumentEjected)
+DRIVERAPI BOOL DRIVERCALL ELCAbort(ELC pelc, BOOL* pfDocumentEjected)
 {
 	MYPELCSTRUCT;
 	BOOL fOK = true;
@@ -2007,7 +2007,7 @@ static BOOL StartAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyn
 /// <param name="pfTimeout"></param>
 /// <param name="pfCancelled"></param>
 /// <returns><see </returns>
-DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer)
+DRIVERAPI ELCResult DRIVERCALL ELCWaitAsync(ELC pelc, int iTimer)
 {
 	MYPELCSTRUCT;
 	//if (IsInProgress(pelc))
@@ -2030,7 +2030,7 @@ DRIVERAPI ELCResult __stdcall ELCWaitAsync(ELC pelc, int iTimer)
 /// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
 /// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
+DRIVERAPI BOOL DRIVERCALL ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
 	BOOL fOK = false;
@@ -2066,7 +2066,7 @@ DRIVERAPI BOOL __stdcall ELCReadAsync(ELC pelc, int iTimer, HANDLE startTimerEve
 /// <param name="sizeChpnBuffer">Size of chpn buffer</param>
 /// <param name="fDocumentInside">True if the document is still inside after reading</param>
 /// <returns>True is successfull, false otherwise</returns>
-DRIVERAPI ELCResult __stdcall ELCReadAsyncResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentIsStillInside)
+DRIVERAPI ELCResult DRIVERCALL ELCReadAsyncResult(ELC pelc, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentIsStillInside)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
@@ -2145,7 +2145,7 @@ DRIVERAPI ELCResult __stdcall ELCReadAsyncResult(ELC pelc, char* pchRawBuffer, i
 /// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
 /// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
+DRIVERAPI BOOL DRIVERCALL ELCWriteAsync(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent, HANDLE asyncOperationEndedEvent)
 {
 	MYPELCSTRUCT;
 	BOOL fOK = false;
@@ -2208,7 +2208,7 @@ DRIVERAPI BOOL __stdcall ELCWriteAsync(ELC pelc, const char* pszData, char* pchB
 /// <param name="pfSuccess">true if printing went successfully, false otherwise</param>
 /// <param name="iTimer">Timer to wait for completion</param>
 /// <returns>true if the order has been processed successfully, false otherwise</returns>
-DRIVERAPI ELCResult __stdcall ELCWriteAsyncResult(ELC pelc)
+DRIVERAPI ELCResult DRIVERCALL ELCWriteAsyncResult(ELC pelc)
 {
 	MYPELCSTRUCT;
 	// are we already inside an async operation ?
@@ -2250,7 +2250,7 @@ DRIVERAPI ELCResult __stdcall ELCWriteAsyncResult(ELC pelc)
 /// <param name="pfTimeout"></param>
 /// <param name="pfCancelled"></param>
 /// <returns></returns>
-DRIVERAPI ELCResult __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside)
+DRIVERAPI ELCResult DRIVERCALL ELCRead(ELC pelc, int iTimer, HANDLE startTimerEvent, char* pchRawBuffer, int sizeRawBuffer, char* pchChpnBuffer, int sizeChpnBuffer, BOOL* pfDocumentInside)
 {
 	MYPELCSTRUCT;
 	if (ELCReadAsync(pelc, iTimer, startTimerEvent, NULL))
@@ -2277,7 +2277,7 @@ DRIVERAPI ELCResult __stdcall ELCRead(ELC pelc, int iTimer, HANDLE startTimerEve
 /// <param name="startTimerEvent">Event signaled when the caller's timer has been started</param>
 /// <param name="asyncOperationEndedEvent">Event signaled when the async operation has ended</param>
 /// <returns></returns>
-DRIVERAPI ELCResult __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent)
+DRIVERAPI ELCResult DRIVERCALL ELCWrite(ELC pelc, const char* pszData, char* pchBuffer, const int sizeBuffer, int iTimer, HANDLE startTimerEvent)
 {
 	MYPELCSTRUCT;
 	if (ELCWriteAsync(pelc, pszData, pchBuffer, sizeBuffer, iTimer, startTimerEvent, NULL))
@@ -2299,7 +2299,7 @@ DRIVERAPI ELCResult __stdcall ELCWrite(ELC pelc, const char* pszData, char* pchB
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>true if successfull, false otherwise</returns>
-DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc)
+DRIVERAPI BOOL DRIVERCALL ELCInitiateDialog(ELC pelc)
 {
 	MYPELCSTRUCT;
 	BOOL fOK;
@@ -2330,7 +2330,7 @@ DRIVERAPI BOOL __stdcall ELCInitiateDialog(ELC pelc)
 /// <param name="pelc"></param>
 /// <param name="index">Index of CR to return</param>
 /// <returns>The CR as pointed by the index if valid, 0 otherwise</returns>
-DRIVERAPI char __stdcall ELCCR(ELC pelc, int index)
+DRIVERAPI char DRIVERCALL ELCCR(ELC pelc, int index)
 {
 	MYPELCSTRUCT;
 	if (0 <= index && CR_SIZE >= index)
@@ -2345,7 +2345,7 @@ DRIVERAPI char __stdcall ELCCR(ELC pelc, int index)
 /// <param name="pelc"></param>
 /// <param name="BaudRate">rate to use</param>
 /// <returns>rate to use if successful, </returns>
-DRIVERAPI DWORD __stdcall ELCSpeed(ELC pelc, DWORD BaudRate)
+DRIVERAPI DWORD DRIVERCALL ELCSpeed(ELC pelc, DWORD BaudRate)
 {
 	MYPELCSTRUCT;
 	if (IsOpen(pelc))
@@ -2368,7 +2368,7 @@ DRIVERAPI DWORD __stdcall ELCSpeed(ELC pelc, DWORD BaudRate)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns></returns>
-DRIVERAPI BOOL __stdcall ELCCancelAsync(ELC pelc)
+DRIVERAPI BOOL DRIVERCALL ELCCancelAsync(ELC pelc)
 {
 	MYPELCSTRUCT;
 	if (IsInProgress(pelc))
@@ -2385,7 +2385,7 @@ DRIVERAPI BOOL __stdcall ELCCancelAsync(ELC pelc)
 /// <param name="timer"></param>
 /// <param name="value">In seconds for all timer..., in milliseconds for all Tx</param>
 /// <returns></returns>
-DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
+DRIVERAPI void DRIVERCALL ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 {
 	MYPELCSTRUCT;
 	if (0 == value)
@@ -2421,7 +2421,7 @@ DRIVERAPI void __stdcall ELCSetTimer(ELC pelc, ELCTimer timer, DWORD value)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>True if within an async operation, false otherwise</returns>
-DRIVERAPI  BOOL __stdcall  ELCIsInProgress(ELC pelc)
+DRIVERAPI  BOOL DRIVERCALL  ELCIsInProgress(ELC pelc)
 {
 	return IsInProgress(pelc);
 }
@@ -2431,7 +2431,7 @@ DRIVERAPI  BOOL __stdcall  ELCIsInProgress(ELC pelc)
 /// </summary>
 /// <param name="pelc"></param>
 /// <returns>True if within an async operation, false otherwise</returns>
-DRIVERAPI  ELCResult __stdcall  ELCLastAsyncResult(ELC pelc)
+DRIVERAPI  ELCResult DRIVERCALL  ELCLastAsyncResult(ELC pelc)
 {
 	MYPELCSTRUCT;
 	if (NULL != MYPFNC)
