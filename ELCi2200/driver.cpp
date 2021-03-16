@@ -1,5 +1,4 @@
 #include "pch.h"
-#define DRIVER_EXPORTS
 #include	"driver.h"
 #include <stdio.h>
 #include <stdlib.h>

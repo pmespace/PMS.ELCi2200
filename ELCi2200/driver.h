@@ -3,26 +3,7 @@
 #ifndef DRIVER_H
 #define DRIVER_H
 
-#define DRIVERCALL __stdcall
-
-#ifndef DRIVER_STATIC
-
-#ifdef DRIVER_EXPORTS
-#define DRIVERAPI __declspec(dllexport)
-#else
-#define DRIVERAPI __declspec(dllimport)
-#endif
-
-#else
-
-#ifdef DRIVER_EXPORTS
-#define DRIVERAPI 
-#else
-#define DRIVERAPI extern 
-#endif
-
-#endif
-
+#include "exports.h"
 #include "windows.h"
 
 //**********
